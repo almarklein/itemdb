@@ -261,7 +261,7 @@ class ItemDB:
             if fieldname not in found_indices:
                 if fieldname.startswith("!"):
                     raise IndexError(
-                        f"Cannot add unique index {fieldname!r} after db creation."
+                        f"Cannot add unique index {fieldname!r} after the database has been created."
                     )
                 elif fieldname in {x.lstrip("!") for x in found_indices}:
                     raise IndexError(f"Given index {fieldname!r} should be unique.")
