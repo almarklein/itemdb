@@ -395,6 +395,27 @@ def test_multiple_items():
     assert len(db.select_all("items")) == 99
 
 
+def test_delete_items():
+
+    db = ItemDB(":memory:")
+    db.ensure_indices("persons", "!name")
+    with db:
+        db.put_one("persons", name="Jan", age=30)
+        db.put_one("persons", name="Henk", age=42)
+        db.put_one("persons", name="Bart", age=19)
+        db.put_one("persons", name="Ivo", age=28)
+
+    assert db.select_one("persons", "name == $1", "Bart") == {"name": "Bart", "age": 19}
+
+    # Delete - must be in a transaction!
+    with raises(IOError):
+        db.delete("persons", "name == $1", "Bart")
+    with db:
+        db.delete("persons", "name == $1", "Bart")
+
+    assert db.select_one("persons", "name == $1", "Bart") is None
+
+
 def test_transactions1():
 
     filename = get_fresh_filename()

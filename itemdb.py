@@ -228,6 +228,9 @@ class ItemDB:
 
     def ensure_indices(self, table_name, *indices):
         """ Ensure that the given table exists and has the given indices.
+        If an index name is prefixed with "!", it indicates a field that is
+        mandatory and unique.
+
         This method is designed to return as quickly as possible when the table
         already has the appropriate indices. Returns the ItemDB object,
         so calls to this method can be stacked.
@@ -257,6 +260,7 @@ class ItemDB:
                 self.put(table_name, *items)
 
         return self  # allow stacking this function
+
 
     def _ensure_table(self, table_name, indices):
         """ Slow version to ensure table.
@@ -421,3 +425,25 @@ class ItemDB:
         """ Put an item into the given table using kwargs.
         """
         self.put(table_name, item)
+
+    def delete(self, table_name, query=None, *args):
+        """ Delete an item from the given table. This works similar to select(),
+        except that matching items are deleted instead of returned.
+
+        Can raise KeyError if an invalid table is given, IOError if not
+        used within a transaction. IndexError if an invalid field is
+        used in the query, or sqlite3.OperationalError for an invalid
+        query.
+        """
+        self.get_indices(table_name)  # Fail with KeyError for invalid table name
+        cur = self._cur
+        if cur is None:
+            raise IOError("Can only use delete() under a context.")
+        try:
+            cur.execute(f"DELETE FROM {table_name} WHERE {query}", args)
+        except sqlite3.OperationalError as err:
+            if "no such column" in str(err).lower():
+                raise IndexError(str(err))
+            raise err
+        finally:
+            cur.close()
