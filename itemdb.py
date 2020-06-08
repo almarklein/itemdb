@@ -47,7 +47,7 @@ def asyncify(func):
     async def asyncified_func(*args, **kwargs):
         loop = asyncio.get_event_loop()
         future = loop.create_future()
-        t = threading.Thread(
+        threading.Thread(
             name="asyncify " + func.__name__,
             target=threaded_func,
             args=(loop, future, args, kwargs),

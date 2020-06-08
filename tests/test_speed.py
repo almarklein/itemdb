@@ -2,11 +2,8 @@ import time
 import asyncio
 import threading
 import concurrent
-from functools import partial
 
 from testutils import run_tests
-
-from itemdb import ItemDB
 
 
 executor = concurrent.futures.ThreadPoolExecutor(
@@ -17,16 +14,17 @@ executor = concurrent.futures.ThreadPoolExecutor(
 async def run_in_thread(func, *args, **kwargs):
     loop = asyncio.get_event_loop()
     future = loop.create_future()
+
     def thread_func():
         result = func(*args, **kwargs)
         loop.call_soon_threadsafe(future.set_result, result)
+
     t = threading.Thread(target=thread_func)
     t.start()
     return await future
 
 
 class FakeItemDB:
-
     def work(self):
         pass  # time.sleep(0)
 
@@ -70,6 +68,7 @@ def test_speed_of_async():
         method_name = f"work_async{i}"
         t = loop.run_until_complete(do_some_work(method_name))
         print(method_name, t)
+
 
 if __name__ == "__main__":
     run_tests(globals())

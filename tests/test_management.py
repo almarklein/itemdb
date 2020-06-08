@@ -2,12 +2,7 @@
 """
 
 import os
-import time
-import random
-import sqlite3
 import tempfile
-import threading
-from contextlib import closing
 
 from pytest import raises
 
