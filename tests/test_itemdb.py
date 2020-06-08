@@ -1,3 +1,6 @@
+""" The main usage tests.
+"""
+
 import os
 import time
 import random
@@ -37,25 +40,8 @@ def test_init_read():
     # Two tables
 
     db = ItemDB(":memory:").ensure_table("foo", "key").ensure_table("bar")
-
-    assert "[]" not in repr(db)
-    assert db.get_table_names()[0] == "bar"
-    assert db.get_table_names()[1] == "foo"
     assert db.count_all("foo") == 0
     assert db.count_all("bar") == 0
-
-
-def test_table_fails():
-
-    db = ItemDB(":memory:")
-    for name in [(), 4, b"", [], {}]:
-        with raises(TypeError):  # not a str
-            db.ensure_table(name)
-
-    db = ItemDB(":memory:")
-    for name in ["foo bar", "foo-bar", "33", "foo!", "!foo"]:
-        with raises(ValueError):  # not an identifier
-            db.ensure_table(name)
 
 
 def test_index_fails():
@@ -405,50 +391,31 @@ def test_delete_items():
         db.put_one("persons", name="Bart", age=19)
         db.put_one("persons", name="Ivo", age=28)
 
-    assert db.select_one("persons", "name == $1", "Bart") == {"name": "Bart", "age": 19}
+    assert db.select_one("persons", "name == ?", "Bart") == {"name": "Bart", "age": 19}
 
     # Delete - must be in a transaction!
     with raises(IOError):
-        db.delete("persons", "name == $1", "Bart")
+        db.delete("persons", "name == ?", "Bart")
     with db:
-        db.delete("persons", "name == $1", "Bart")
+        db.delete("persons", "name == ?", "Bart")
 
-    assert db.select_one("persons", "name == $1", "Bart") is None
+    assert db.count_all("persons") == 3
+    assert db.select_one("persons", "name == ?", "Bart") is None
 
+    # And that transaction can be cancelled
+    try:
+        with db:
+            db.delete("persons", "name > ''")
+            raise RuntimeError()
+    except RuntimeError:
+        pass
 
-def test_delete_table():
+    assert db.count_all("persons") == 3
 
-    db = ItemDB(":memory:")
-    db.ensure_table("persons", "!name")
-    db.ensure_table("animals", "!name")
+    # Just to show that without that raise, it would indeed clear the table
     with db:
-        db.put_one("persons", name="Jan", age=30)
-        db.put_one("persons", name="Henk", age=42)
-        db.put_one("animals", name="Takkie", age=30)
-        db.put_one("animals", name="Siepe", age=42)
-
-    assert db.count_all("persons") == 2
-    assert db.count_all("animals") == 2
-
-    db.delete_table("persons")
-
-    with raises(KeyError):
-        db.count_all("persons")
-    db.ensure_table("persons", "!name")
+        db.delete("persons", "name > ''")
     assert db.count_all("persons") == 0
-    assert db.count_all("animals") == 2
-
-    db.delete_table("animals")
-
-    with raises(KeyError):
-        db.count_all("animals")
-    db.ensure_table("animals", "!name")
-    assert db.count_all("persons") == 0
-    assert db.count_all("animals") == 0
-
-    db.delete_table("persons")
-    with raises(KeyError):
-        db.delete_table("persons")
 
 
 def test_transactions1():

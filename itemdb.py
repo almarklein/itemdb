@@ -1,5 +1,6 @@
 """
 Implementation of a transactional database for storage and retrieval of dict items.
+All the benefits of sqlite, but an easy API and transactions by default.
 """
 
 import json
@@ -17,17 +18,12 @@ json_decode = json.JSONDecoder().decode
 #   this to prevent Python from issuing BEGIN before DML statements.
 # * Using a connection object as a context manager auto-commits/rollbacks a
 #   transaction.
-# * We should close cursos objects as soon as possible, because they can hold
+# * We should close cursor objects as soon as possible, because they can hold
 #   back waiting writers. That's why we dont have an iterator.
 # * MongoDB's approach of db.tablename.push() looks nice, but I don't like
 #   the "magical" side of it, especially since the db does not know its tables.
 #   Also it makes the code more complex, introduces an extra class, and
 #   increases the risk of preventing a db from closing (by holding a table).
-
-
-# todo: Spin this out? It would need some more:
-# - delete objects
-# - other management tasks, like dropping tables, re-indexing etc.
 
 
 def asyncify(func):
@@ -66,11 +62,11 @@ class ItemDB:
     """ A transactional database for storage and retrieval of dict items.
 
     The items in the database can be any JSON serializable dictionary.
-    Indices can be defined for specific fields to enable selecting items
-    based on these values. Indices can be marked as unique to make a field
-    mandatory and *identify* items based on that field.
+    Indices can be defined for specific fields to enable fast selection
+    of items based on these fields. Indices can be marked as unique to
+    make a field mandatory and *identify* items based on that field.
 
-    This class makes use SQLite, resulting in a fast and reliable
+    This class makes use of SQLite, resulting in a fast and reliable
     (ACID-compliant) system suitable for heavy duty work (e.g. in a web
     server). Though with a simple API, and the flexibility to store
     items with arbitrary fields, and add indices when needed.
@@ -81,7 +77,7 @@ class ItemDB:
         db = ItemDB(filename)
 
         # Make sure that it has a "persons" table with appropriate indices
-        db.ensure("persons", "!name", "age")
+        db.ensure_table("persons", "!name", "age")
 
         # Insert a few items
         with db:
@@ -98,18 +94,14 @@ class ItemDB:
         with db:
             db.put("persons", dict(name="John", age=21, fav_number=8))
 
-        # When done - also consider using ``with closing(db)``
-        db.close()
-
     One can see how items are added that include additional fields, or
     do not have all fields (Guido does not have an age). The ``name`` field
     is mandatory though, indicated by the exclamation mark ("!"). It also means
     that the ``name`` field is unique. Putting an item with an existing name
     will update/overwrite it (as in the second case where John is stored).
 
-    Indices can be added at any time, but note that it will exist forever.
-    Further, a unique index (prefixed with "!") can only be created when the
-    database is opened for the first time.
+    Indices can be added at any time, but cannot be removed. Further, unique
+    indices (prefixed with "!") cannot be added once the table exists.
 
     As you see in the example, ``put`` can only be used inside a context
     (a with-statement). A context represents a transaction: only one
@@ -122,13 +114,13 @@ class ItemDB:
             ...
             raise RuntimeError()
 
-        # The transaction is "atomic". This works across processes
+        # The transaction is atomic. This works across processes
         # (even across Docker containers using the same db in a shared folder).
+        # Without a context, Johns favourite number could be changed from
+        # somewhere else and we would wrongly overwrite that change.
         with db:
             john = db.select_one("persons", "name = ?", "John")
             john["fav_number"] += 1
-            # Without a context, Johns favourite number could be changed from
-            # somewhere else and we would wrongly overwrite that change.
             db.put("persons", john)
 
     On terminology:
@@ -159,6 +151,7 @@ class ItemDB:
         self._cur = None
         if value:
             self._conn.rollback()
+            self._indices_per_table.clear()  # we cannot trust this cache anymore
         else:
             self._conn.commit()
 
@@ -220,12 +213,17 @@ class ItemDB:
 
     def ensure_table(self, table_name, *indices):
         """ Ensure that the given table exists and has the given indices.
+
         If an index name is prefixed with "!", it indicates a field that is
-        mandatory and unique.
+        mandatory and unique. Note that unique indices cannot be added
+        when the table already exist.
 
         This method is designed to return as quickly as possible when the table
-        already has the appropriate indices. Returns the ItemDB object,
+        already has the appropriate table and indices. Returns the ItemDB object,
         so calls to this method can be stacked.
+
+        Although this call may modify the database, one does not need
+        to call this in a transaction.
         """
 
         if not all(isinstance(x, str) for x in indices):
@@ -237,24 +235,29 @@ class ItemDB:
         except KeyError:
             missing_indices = {"--table--"}
 
-        # Do we need to do some work?
+        # Do we need to do some work? Allow being used under a context and not
         if missing_indices:
-            with self:
-                # Make sure the table is complete
-                self._ensure_table(table_name, indices)
-                self._indices_per_table.pop(table_name, None)  # let it refresh
-                # Update values that already had a value for the just added columns/indices
-                items = [
-                    item
-                    for item in self.select_all(table_name)
-                    if any(x.lstrip("!") in item for x in missing_indices)
-                ]
-                self.put(table_name, *items)
+            if self._cur:
+                self._ensure_table_helper1(table_name, indices, missing_indices)
+            else:
+                with self:
+                    self._ensure_table_helper1(table_name, indices, missing_indices)
 
         return self  # allow stacking this function
 
+    def _ensure_table_helper1(self, table_name, indices, missing_indices):
+        # Make sure the table is complete
+        self._ensure_table_helper2(table_name, indices)
+        self._indices_per_table.pop(table_name, None)  # let it refresh
+        # Update values that already had a value for the just added columns/indices
+        items = [
+            item
+            for item in self.select_all(table_name)
+            if any(x.lstrip("!") in item for x in missing_indices)
+        ]
+        self.put(table_name, *items)
 
-    def _ensure_table(self, table_name, indices):
+    def _ensure_table_helper2(self, table_name, indices):
         """ Slow version to ensure table.
         """
 
@@ -269,7 +272,7 @@ class ItemDB:
                 raise IndexError("Column names cannot be '_ob' (name is reserved).")
 
         # Ensure the table.
-        # If there is one unique key, make it a the primary key and omit rowid.
+        # If there is one unique key, make it the primary key and omit rowid.
         # This results in smaller and faster databases.
         text = f"CREATE TABLE IF NOT EXISTS {table_name} (_ob TEXT NOT NULL"
         unique_keys = sorted(x.lstrip("!") for x in indices if x.startswith("!"))
@@ -290,7 +293,7 @@ class ItemDB:
             if fieldname not in found_indices:
                 if fieldname.startswith("!"):
                     raise IndexError(
-                        f"Cannot add unique index {fieldname!r} after the database has been created."
+                        f"Cannot add unique index {fieldname!r} after the table has been created."
                     )
                 elif fieldname in {x.lstrip("!") for x in found_indices}:
                     raise IndexError(f"Given index {fieldname!r} should be unique.")
@@ -302,11 +305,32 @@ class ItemDB:
     def delete_table(self, table_name):
         """ Delete the table with the given name.
         Warning: this deletes the whole table, including all its items.
+        This method must be called within a transaction.
+
+        Can raise KeyError if an invalid table is given, or IOError if not
+        used within a transaction
         """
         self.get_indices(table_name)  # Fail with KeyError for invalid table name
+        cur = self._cur
+        if cur is None:
+            raise IOError("Can only use delete_table() within a transaction.")
         self._indices_per_table.pop(table_name, None)
-        with self:
-            self._cur.execute(f"DROP TABLE {table_name}")
+        self._cur.execute(f"DROP TABLE {table_name}")
+
+    def rename_table(self, table_name, new_table_name):
+        """ Rename a table. This method must be called within a transaction.
+
+        Can raise KeyError if an invalid table is given, or IOError if not
+        used within a transaction
+        """
+        self.get_indices(table_name)  # Fail with KeyError for invalid table name
+        if not (isinstance(new_table_name, str) and table_name.isidentifier()):
+            raise TypeError(f"Table name must be a str identifier, not '{table_name}'")
+        cur = self._cur
+        if cur is None:
+            raise IOError("Can only use rename_table() within a transaction.")
+        self._indices_per_table.pop(table_name, None)
+        self._cur.execute(f"ALTER TABLE {table_name} RENAME TO {new_table_name}")
 
     def count_all(self, table_name):
         """ Get the total number of items in the given table.
@@ -319,7 +343,7 @@ class ItemDB:
         finally:
             cur.close()
 
-    def count(self, table_name, query=None, *args):
+    def count(self, table_name, query, *args):
         """ Get the number of items in the given table that match the given query.
 
         Can raise KeyError if an invalid table is given, IndexError if an
@@ -349,7 +373,7 @@ class ItemDB:
         finally:
             cur.close()
 
-    def select(self, table_name, query=None, *args):
+    def select(self, table_name, query, *args):
         """ Get the items in the given table that match the given query.
 
         The query follows SQLite syntax and can only include indexed fields.
@@ -388,6 +412,7 @@ class ItemDB:
 
     def put(self, table_name, *items):
         """ Put one or more items into the given table.
+        This method must be called within a transaction.
 
         Can raise KeyError if an invalid table is given, IOError if not
         used within a transaction, TypeError if an item is not a (JSON
@@ -396,7 +421,7 @@ class ItemDB:
         """
         cur = self._cur
         if cur is None:
-            raise IOError("Can only use put() under a context.")
+            raise IOError("Can only use put() within a transaction.")
 
         # Get indices - fail with KeyError for invalid table name
         indices = self.get_indices(table_name)
@@ -424,22 +449,24 @@ class ItemDB:
 
     def put_one(self, table_name, **item):
         """ Put an item into the given table using kwargs.
+        This method must be called within a transaction.
         """
         self.put(table_name, item)
 
-    def delete(self, table_name, query=None, *args):
+    def delete(self, table_name, query, *args):
         """ Delete items from the given table. This works similar to select(),
         except that matching items are deleted instead of returned.
+        This method must be called within a transaction.
 
         Can raise KeyError if an invalid table is given, IOError if not
-        used within a transaction. IndexError if an invalid field is
+        used within a transaction, IndexError if an invalid field is
         used in the query, or sqlite3.OperationalError for an invalid
         query.
         """
         self.get_indices(table_name)  # Fail with KeyError for invalid table name
         cur = self._cur
         if cur is None:
-            raise IOError("Can only use delete() under a context.")
+            raise IOError("Can only use delete() within a transaction.")
         try:
             cur.execute(f"DELETE FROM {table_name} WHERE {query}", args)
         except sqlite3.OperationalError as err:
