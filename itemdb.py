@@ -3,8 +3,9 @@ Implementation of a transactional database for storage and retrieval of dict ite
 """
 
 import json
+import asyncio
 import sqlite3
-
+import threading
 
 json_encode = json.JSONEncoder(ensure_ascii=True).encode
 json_decode = json.JSONDecoder().decode
@@ -27,6 +28,38 @@ json_decode = json.JSONDecoder().decode
 # todo: Spin this out? It would need some more:
 # - delete objects
 # - other management tasks, like dropping tables, re-indexing etc.
+
+
+def asyncify(func):
+    """ Decorator that turns a normal function into an awaitable
+    co-routine, which will be executed in a separate thread. This allows
+    async code to execute io-bound code (like querying a sqlite
+    database) without stalling.
+
+    Note that the code in func must be thread-safe. It's probably best to
+    isolate the io-bound parts of your code and only wrap these.
+    """
+
+    def threaded_func(loop, future, args, kwargs):
+        try:
+            result = func(*args, **kwargs)
+        except BaseException as e:
+            loop.call_soon_threadsafe(future.set_exception, e)
+        else:
+            loop.call_soon_threadsafe(future.set_result, result)
+
+    async def asyncified_func(*args, **kwargs):
+        loop = asyncio.get_event_loop()
+        future = loop.create_future()
+        t = threading.Thread(
+            name="asyncify " + func.__name__,
+            target=threaded_func,
+            args=(loop, future, args, kwargs),
+        ).start()
+        return await future
+
+    asyncified_func.__name__ = "asyncified_" + func.__name__
+    return asyncified_func
 
 
 class ItemDB:
@@ -169,13 +202,13 @@ class ItemDB:
         except KeyError:
             pass
         except TypeError:
-            raise TypeError("Table name must be str.")
+            raise TypeError(f"Table name must be str, not {table_name}.")
 
         # Check table name
         if not isinstance(table_name, str):
-            raise TypeError("Table name must be str.")
+            raise TypeError(f"Table name must be str, not {table_name}")
         elif not table_name.isidentifier():
-            raise ValueError("Table name must be an identifier.")
+            raise ValueError(f"Table name must be an identifier, not '{table_name}'")
 
         # Get columns for the table (cid, name, type, notnull, default, pk)
         cur = self._conn.cursor()
@@ -191,13 +224,13 @@ class ItemDB:
             self._indices_per_table[table_name] = found_indices
             return found_indices
         else:
-            raise KeyError(f"Table {table_name} not present, maybe ensure() it first?")
+            raise KeyError(f"Table {table_name} not present, maybe use ensure_indices()?")
 
-    def ensure(self, table_name, *indices):
+    def ensure_indices(self, table_name, *indices):
         """ Ensure that the given table exists and has the given indices.
         This method is designed to return as quickly as possible when the table
-        is already ok. Returns the databse object, so calls to this method
-        can be stacked.
+        already has the appropriate indices. Returns the ItemDB object,
+        so calls to this method can be stacked.
         """
 
         if not all(isinstance(x, str) for x in indices):
@@ -237,7 +270,7 @@ class ItemDB:
             if not key.isidentifier():
                 raise ValueError("Column names must be identifiers.")
             elif key == "_ob":
-                raise IndexError("Column names cannot be '_ob'.")
+                raise IndexError("Column names cannot be '_ob' (name is reserved).")
 
         # Ensure the table.
         # If there is one unique key, make it a the primary key and omit rowid.
@@ -358,7 +391,7 @@ class ItemDB:
         """
         cur = self._cur
         if cur is None:
-            raise IOError("Can only put() under a context.")
+            raise IOError("Can only use put() under a context.")
 
         # Get indices - fail with KeyError for invalid table name
         indices = self.get_indices(table_name)
