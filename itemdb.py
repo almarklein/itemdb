@@ -172,24 +172,16 @@ class ItemDB:
         """
         self._conn.close()
 
-    def get_table_info(self):
-        """ Return a list with a tuple (table_name, count, indices) for
-        each table present in the database (sorted by table name).
+    def get_table_names(self):
+        """ Return a (sorted) list of table names present in the database.
         """
-        tables = []
-        # Get table names
         cur = self._conn.cursor()
         try:
             cur.execute("SELECT name FROM sqlite_master WHERE type='table';")
             table_names = {x[0] for x in cur}
         finally:
             cur.close()
-        # Get info on each table
-        for table_name in sorted(table_names):
-            indices = sorted(self.get_indices(table_name))
-            count = self.count_all(table_name)
-            tables.append((table_name, count, indices))
-        return tables
+        return list(sorted(table_names))
 
     def get_indices(self, table_name):
         """ Get a set of indices for the given table. Names prefixed with "!"
@@ -224,9 +216,9 @@ class ItemDB:
             self._indices_per_table[table_name] = found_indices
             return found_indices
         else:
-            raise KeyError(f"Table {table_name} not present, maybe use ensure_indices()?")
+            raise KeyError(f"Table {table_name} not present, maybe use ensure_table()?")
 
-    def ensure_indices(self, table_name, *indices):
+    def ensure_table(self, table_name, *indices):
         """ Ensure that the given table exists and has the given indices.
         If an index name is prefixed with "!", it indicates a field that is
         mandatory and unique.
@@ -306,6 +298,15 @@ class ItemDB:
             cur.execute(
                 f"CREATE INDEX IF NOT EXISTS idx_{table_name}_{key} ON {table_name} ({key})"
             )
+
+    def delete_table(self, table_name):
+        """ Delete the table with the given name.
+        Warning: this deletes the whole table, including all its items.
+        """
+        self.get_indices(table_name)  # Fail with KeyError for invalid table name
+        self._indices_per_table.pop(table_name, None)
+        with self:
+            self._cur.execute(f"DROP TABLE {table_name}")
 
     def count_all(self, table_name):
         """ Get the total number of items in the given table.
@@ -427,7 +428,7 @@ class ItemDB:
         self.put(table_name, item)
 
     def delete(self, table_name, query=None, *args):
-        """ Delete an item from the given table. This works similar to select(),
+        """ Delete items from the given table. This works similar to select(),
         except that matching items are deleted instead of returned.
 
         Can raise KeyError if an invalid table is given, IOError if not

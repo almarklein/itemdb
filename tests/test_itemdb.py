@@ -25,7 +25,7 @@ def test_init_read():
 
     db = ItemDB(":memory:")
 
-    assert db.get_table_info() == []  # no tables
+    assert db.get_table_names() == []  # no tables
 
     with raises(KeyError):
         db.select("foo", "key is NULL")
@@ -36,11 +36,11 @@ def test_init_read():
 
     # Two tables
 
-    db = ItemDB(":memory:").ensure_indices("foo", "key").ensure_indices("bar")
+    db = ItemDB(":memory:").ensure_table("foo", "key").ensure_table("bar")
 
     assert "[]" not in repr(db)
-    assert db.get_table_info()[0][0] == "bar"
-    assert db.get_table_info()[1][0] == "foo"
+    assert db.get_table_names()[0] == "bar"
+    assert db.get_table_names()[1] == "foo"
     assert db.count_all("foo") == 0
     assert db.count_all("bar") == 0
 
@@ -50,12 +50,12 @@ def test_table_fails():
     db = ItemDB(":memory:")
     for name in [(), 4, b"", [], {}]:
         with raises(TypeError):  # not a str
-            db.ensure_indices(name)
+            db.ensure_table(name)
 
     db = ItemDB(":memory:")
     for name in ["foo bar", "foo-bar", "33", "foo!", "!foo"]:
         with raises(ValueError):  # not an identifier
-            db.ensure_indices(name)
+            db.ensure_table(name)
 
 
 def test_index_fails():
@@ -64,55 +64,55 @@ def test_index_fails():
     db = ItemDB(":memory:")
     for name in [(), 4, b"", [], {}]:
         with raises(TypeError):
-            db.ensure_indices("items", name)
+            db.ensure_table("items", name)
 
     # Invalid index/table names - not an identifier
     db = ItemDB(":memory:")
     for name in ["foo bar", "foo-bar", "33", "foo!"]:
         with raises(ValueError):
-            db.ensure_indices("items", name)
+            db.ensure_table("items", name)
 
     # Reserved
     for name in ["!_ob", "_ob"]:
         with raises(IndexError):
-            db.ensure_indices("items", name)
+            db.ensure_table("items", name)
 
     # Cannot add a unique key
 
     filename = get_fresh_filename()
-    db = ItemDB(filename).ensure_indices("foo", "meh")
+    db = ItemDB(filename).ensure_table("foo", "meh")
     with closing(db):
 
-        assert "foo" in [x[0] for x in db.get_table_info()]
+        assert "foo" in db.get_table_names()
 
         with raises(IndexError):
-            db = ItemDB(filename).ensure_indices("foo", "!key")
+            db = ItemDB(filename).ensure_table("foo", "!key")
 
     # Cannot use a normal key as a unique key
 
     filename = get_fresh_filename()
-    db = ItemDB(filename).ensure_indices("foo", "key")
+    db = ItemDB(filename).ensure_table("foo", "key")
     with closing(db):
 
-        assert "foo" in [x[0] for x in db.get_table_info()]
+        assert "foo" in db.get_table_names()
 
         with raises(IndexError):
-            db = ItemDB(filename).ensure_indices("foo", "!key")
+            db = ItemDB(filename).ensure_table("foo", "!key")
 
     # Cannot use a unique key as a normal key
 
     filename = get_fresh_filename()
-    db = ItemDB(filename).ensure_indices("foo", "!key")
+    db = ItemDB(filename).ensure_table("foo", "!key")
     with closing(db):
 
-        assert "foo" in [x[0] for x in db.get_table_info()]
+        assert "foo" in db.get_table_names()
 
         with raises(IndexError):
-            db = ItemDB(filename).ensure_indices("foo", "key")
+            db = ItemDB(filename).ensure_table("foo", "key")
 
 
 def test_init_write():
-    db = ItemDB(":memory:").ensure_indices("items", "!id", "mt")
+    db = ItemDB(":memory:").ensure_table("items", "!id", "mt")
 
     with raises(IOError):  # Put needs to be used under a context
         db.put("items", dict(id=1, mt=100))
@@ -141,7 +141,7 @@ def test_init_write():
 
     assert len(db.select_all("items")) == 3
     assert db.count_all("items") == 3
-    assert len(db.get_table_info()) == 1
+    assert len(db.get_table_names()) == 1
 
     assert len(db.select("items", "mt == 100")) == 2
     assert len(db.select("items", "mt is NULL")) == 1
@@ -159,7 +159,7 @@ def test_init_write():
 
 def test_multiple_unique_keys():
 
-    db = ItemDB(":memory:").ensure_indices("items", "!id1", "!id2")
+    db = ItemDB(":memory:").ensure_table("items", "!id1", "!id2")
 
     with db:
         db.put_one("items", id1=1, id2=1, value=1)
@@ -176,7 +176,7 @@ def test_missing_values1():
 
     filename = get_fresh_filename()
 
-    db = ItemDB(filename).ensure_indices("items", "!id", "mt")
+    db = ItemDB(filename).ensure_table("items", "!id", "mt")
 
     # Keys that are not listed are NOT ignored
     with db:
@@ -188,11 +188,11 @@ def test_missing_values1():
         db.select("items", "value == 6")
 
     # When a column is added it gets NULL values in the db, and items stay as they are
-    db = ItemDB(filename).ensure_indices("items", "!id", "mt", "value")
+    db = ItemDB(filename).ensure_table("items", "!id", "mt", "value")
     with db:
         db.put("items", dict(id=3, mt=100, value=41))
     #
-    db = ItemDB(filename).ensure_indices("items", "!id", "mt", "value")
+    db = ItemDB(filename).ensure_table("items", "!id", "mt", "value")
     assert db.select_all("items") == [
         dict(id=1, mt=100),
         dict(id=2, mt=100, value=6),
@@ -205,7 +205,7 @@ def test_missing_values1():
 
     # When we don't specify a column, it still gets a value (not NULL)
 
-    db = ItemDB(filename).ensure_indices("items", "!id")
+    db = ItemDB(filename).ensure_table("items", "!id")
     with db:
         db.put("items", dict(id=5, mt=100, value=999))
     assert len(db.select("items", "value == 999")) == 1
@@ -216,7 +216,7 @@ def test_missing_values2():
     filename = get_fresh_filename()
 
     db = ItemDB(filename)
-    db.ensure_indices("items", "!id", "mt")
+    db.ensure_table("items", "!id", "mt")
 
     # Keys that are not listed are NOT ignored
     with db:
@@ -228,7 +228,7 @@ def test_missing_values2():
         db.select("items", "value == 6")
 
     # When a column is added it gets NULL values in the db, and items stay as they are
-    db.ensure_indices("items", "value")
+    db.ensure_table("items", "value")
     with db:
         db.put("items", dict(id=3, mt=100, value=41))
     #
@@ -251,7 +251,7 @@ def test_missing_values2():
 
 def test_usage_items():
 
-    db = ItemDB(":memory:").ensure_indices("items", "!id", "mt", "value")
+    db = ItemDB(":memory:").ensure_table("items", "!id", "mt", "value")
 
     # Need id
     with raises(IndexError):
@@ -287,14 +287,14 @@ def test_usage_items():
     x = db.select_one("items", "id == ?", 3)
     assert x["mt"] == 101
 
-    db = ItemDB(":memory:").ensure_indices("items", "!id", "mt", "value")
+    db = ItemDB(":memory:").ensure_table("items", "!id", "mt", "value")
     x = db.select_one("items", "id == ?", 3)
     assert x is None
 
 
 def test_usage_settings():
 
-    db = ItemDB(":memory:").ensure_indices("settings", "!id", "mt", "value")
+    db = ItemDB(":memory:").ensure_table("settings", "!id", "mt", "value")
 
     # Need id
     with raises(IndexError):
@@ -334,7 +334,7 @@ def test_multiple_items():
     filename = get_fresh_filename()
 
     db = ItemDB(filename)
-    db.ensure_indices("items", "!id")
+    db.ensure_table("items", "!id")
 
     assert len(db.select_all("items")) == 0
 
@@ -398,7 +398,7 @@ def test_multiple_items():
 def test_delete_items():
 
     db = ItemDB(":memory:")
-    db.ensure_indices("persons", "!name")
+    db.ensure_table("persons", "!name")
     with db:
         db.put_one("persons", name="Jan", age=30)
         db.put_one("persons", name="Henk", age=42)
@@ -416,12 +416,47 @@ def test_delete_items():
     assert db.select_one("persons", "name == $1", "Bart") is None
 
 
+def test_delete_table():
+
+    db = ItemDB(":memory:")
+    db.ensure_table("persons", "!name")
+    db.ensure_table("animals", "!name")
+    with db:
+        db.put_one("persons", name="Jan", age=30)
+        db.put_one("persons", name="Henk", age=42)
+        db.put_one("animals", name="Takkie", age=30)
+        db.put_one("animals", name="Siepe", age=42)
+
+    assert db.count_all("persons") == 2
+    assert db.count_all("animals") == 2
+
+    db.delete_table("persons")
+
+    with raises(KeyError):
+        db.count_all("persons")
+    db.ensure_table("persons", "!name")
+    assert db.count_all("persons") == 0
+    assert db.count_all("animals") == 2
+
+    db.delete_table("animals")
+
+    with raises(KeyError):
+        db.count_all("animals")
+    db.ensure_table("animals", "!name")
+    assert db.count_all("persons") == 0
+    assert db.count_all("animals") == 0
+
+    db.delete_table("persons")
+    with raises(KeyError):
+        db.delete_table("persons")
+
+
 def test_transactions1():
 
     filename = get_fresh_filename()
 
     db = ItemDB(filename)
-    db.ensure_indices("items", "!id", "mt")
+    db.ensure_table("items", "!id", "mt")
 
     # Add items the easy way
     with db:
@@ -449,7 +484,7 @@ def test_transactions1():
 def test_transactions2():
 
     filename = get_fresh_filename()
-    with ItemDB(filename).ensure_indices("items", "!id") as db:
+    with ItemDB(filename).ensure_table("items", "!id") as db:
         db.put_one("items", id=3, value=10)
 
     # run transactions in threads while reading from other threads
@@ -527,7 +562,7 @@ def test_database_race_conditions():
 
     # Create db and ensure it has tables
     filename = get_fresh_filename()
-    ItemDB(filename).ensure_indices("items", "!id")
+    ItemDB(filename).ensure_table("items", "!id")
 
     def push_a_bunch():
         for i in range(n_writes):
@@ -572,14 +607,14 @@ def test_threaded_access():
     xx = []
 
     def write_something():
-        db = ItemDB(filename).ensure_indices("settings", "!id")
+        db = ItemDB(filename).ensure_table("settings", "!id")
         with db:
             db.put("settings", dict(id="server_reset", value="42", mt=42))
         db.close()
         return "wrote something"
 
     def read_something():
-        db = ItemDB(filename).ensure_indices("settings", "!id")
+        db = ItemDB(filename).ensure_table("settings", "!id")
         xx.extend(db.select_all("settings"))
         return "read something"
 
