@@ -276,7 +276,7 @@ class ItemDB:
         used within a transaction
         """
         self.get_indices(table_name)  # Fail with KeyError for invalid table name
-        if not (isinstance(new_table_name, str) and table_name.isidentifier()):
+        if not (isinstance(new_table_name, str) and new_table_name.isidentifier()):
             raise TypeError(f"Table name must be a str identifier, not '{table_name}'")
         cur = self._cur
         if cur is None:

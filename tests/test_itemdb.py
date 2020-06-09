@@ -393,9 +393,16 @@ def test_delete_items():
 
     assert db.select_one("persons", "name == ?", "Bart") == {"name": "Bart", "age": 19}
 
-    # Delete - must be in a transaction!
-    with raises(IOError):
+    # Delete fails
+    with raises(IOError):  # Must be in a transaction!
         db.delete("persons", "name == ?", "Bart")
+    with raises(IndexError):  # No index for age
+        with db:
+            db.delete("persons", "age == 42")
+    with raises(sqlite3.OperationalError):  # Malformed SQL
+        with db:
+            db.delete("persons", "age >>> 42")
+
     with db:
         db.delete("persons", "name == ?", "Bart")
 
@@ -487,7 +494,7 @@ def test_transactions2():
         t.join()
 
     assert len(read) == 30
-    assert 15 <= read.count(10) <= 22
+    assert 5 <= read.count(10) <= 22
     assert 2 <= read.count(20) <= 6
     assert read.count(30) >= 5
 

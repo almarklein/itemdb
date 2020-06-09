@@ -79,10 +79,16 @@ def test_delete_table():
     assert db.count_all("persons") == 0
     assert db.count_all("animals") == 0
 
+    # Need a transaction context
+    with raises(IOError):
+        db.delete_table("persons")
+    # This works
     with db:
         db.delete_table("persons")
+    # But this not because the table is gone
     with raises(KeyError):
-        db.delete_table("persons")
+        with db:
+            db.delete_table("persons")
 
 
 def test_rename_table():
@@ -98,6 +104,16 @@ def test_rename_table():
     assert db.count_all("persons") == 4
     with raises(KeyError):
         db.count_all("clients")
+
+    # Fails
+    with raises(IOError):  # Need a transaction context
+        db.rename_table("persons", "clients")
+    with raises(TypeError):  # not a str
+        with db:
+            db.rename_table("persons", 3)
+    with raises(TypeError):  # not an identifier
+        with db:
+            db.rename_table("persons", "foo bar")
 
     with db:
         db.rename_table("persons", "clients")
