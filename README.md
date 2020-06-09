@@ -1,4 +1,9 @@
+[![PyPI Version](https://img.shields.io/pypi/v/itemdb.svg)](https://pypi.python.org/pypi/itemdb/)
+![CI](https://github.com/almarklein/itemdb/workflows/CI/badge.svg)
+[![Documentation Status](https://readthedocs.org/projects/itemdb/badge/?version=latest)](https://itemdb.readthedocs.io/en/latest/?badge=latest)
+
 # itemdb
+
 
 The itemdb library allows you to store and retrieve Python dicts in a
 database on the local filesystem, in an easy, fast, and reliable way.
@@ -41,7 +46,7 @@ db.count_all("persons")  # -> 4
 db.select("persons", "age > 20")  # -> list of 2 items
 ```
 
-See the [guide](https://itemdb.readthedocs.io) for details.
+See the [guide](https://itemdb.readthedocs.io/en/latest/guide.html) for details.
 
 
 ## Async
