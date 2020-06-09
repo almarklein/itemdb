@@ -1,12 +1,23 @@
+# Copyright (c) 2019-2020 Almar Klein - This code is subject to the MIT license
 """
-Implementation of a transactional database for storage and retrieval of dict items.
-All the benefits of sqlite, but an easy API and transactions by default.
+The itemdb library allows you to store and retrieve Python dicts in a
+database on the local filesystem, in an easy, fast, and reliable way.
+
+Based on the rock-solid and ACID compliant SQLite, but with easy and
+explicit transactions using a ``with`` statement. It provides a simple
+object-based API, with the flexibility to store (JSON-compatible) items
+with arbitrary fields, and add indices when needed.
 """
 
 import json
 import asyncio
 import sqlite3
 import threading
+
+
+__version__ = "1.0.1"
+version_info = tuple(map(int, __version__.split(".")))
+
 
 json_encode = json.JSONEncoder(ensure_ascii=True).encode
 json_decode = json.JSONDecoder().decode
@@ -27,9 +38,11 @@ json_decode = json.JSONDecoder().decode
 
 
 def asyncify(func):
-    """ Decorator that turns a normal function into an awaitable
-    co-routine, which will be executed in a separate thread. This allows
-    async code to execute io-bound code (like querying a sqlite
+    """ Wrap a normal function into an awaitable co-routine. Can be used
+    as a decorator.
+
+    The original function will be executed in a separate thread. This
+    allows async code to execute io-bound code (like querying a sqlite
     database) without stalling.
 
     Note that the code in func must be thread-safe. It's probably best to
@@ -66,70 +79,8 @@ class ItemDB:
     of items based on these fields. Indices can be marked as unique to
     make a field mandatory and *identify* items based on that field.
 
-    This class makes use of SQLite, resulting in a fast and reliable
-    (ACID-compliant) system suitable for heavy duty work (e.g. in a web
-    server). Though with a simple API, and the flexibility to store
-    items with arbitrary fields, and add indices when needed.
-
-    Example:
-
-        # Open the database
-        db = ItemDB(filename)
-
-        # Make sure that it has a "persons" table with appropriate indices
-        db.ensure_table("persons", "!name", "age")
-
-        # Insert a few items
-        with db:
-            db.put("persons", dict(name="Jane", age=22))
-            db.put("persons", dict(name="John", age=20, fav_number=7))
-            db.put("persons", dict(name="Guido"))
-
-        # Show some stats
-        print(db.count_all("persons"), "persons in the database")
-        print(db.select("persons", "age > 10"))
-        print(db.select_one("persons", "name = ?", "John"))
-
-        # Update one person
-        with db:
-            db.put("persons", dict(name="John", age=21, fav_number=8))
-
-    One can see how items are added that include additional fields, or
-    do not have all fields (Guido does not have an age). The ``name`` field
-    is mandatory though, indicated by the exclamation mark ("!"). It also means
-    that the ``name`` field is unique. Putting an item with an existing name
-    will update/overwrite it (as in the second case where John is stored).
-
-    Indices can be added at any time, but cannot be removed. Further, unique
-    indices (prefixed with "!") cannot be added once the table exists.
-
-    As you see in the example, ``put`` can only be used inside a context
-    (a with-statement). A context represents a transaction: only one
-    transaction can be done at a given time, and a transaction either
-    completely succeeds or is canceled as a whole. For example:
-
-        # The change to John will be "rolled back".
-        with db:
-            db.put("persons", dict(name="John", age=99))
-            ...
-            raise RuntimeError()
-
-        # The transaction is atomic. This works across processes
-        # (even across Docker containers using the same db in a shared folder).
-        # Without a context, Johns favourite number could be changed from
-        # somewhere else and we would wrongly overwrite that change.
-        with db:
-            john = db.select_one("persons", "name = ?", "John")
-            john["fav_number"] += 1
-            db.put("persons", john)
-
-    On terminology:
-
-    * A "table" is what is also called "table" in SQL databases, a
-      "collection" in MongoDB, and an "object store" in IndexedDB.
-    * An "item" is what is called a "row" in SQL databases, a "document"
-      in MongoDB, and an "object" in IndexedDB.
-
+    Transactions are done by using the ``with`` statement, and are mandatory
+    for all operations that write to the database.
     """
 
     def __init__(self, filename):
@@ -215,12 +166,12 @@ class ItemDB:
         """ Ensure that the given table exists and has the given indices.
 
         If an index name is prefixed with "!", it indicates a field that is
-        mandatory and unique. Note that unique indices cannot be added
+        mandatory and unique. Note that new unique indices cannot be added
         when the table already exist.
 
-        This method is designed to return as quickly as possible when the table
-        already has the appropriate table and indices. Returns the ItemDB object,
-        so calls to this method can be stacked.
+        This method returns as quickly as possible when the table
+        already exists and has the appropriate indices. Returns the
+        ItemDB object, so calls to this method can be stacked.
 
         Although this call may modify the database, one does not need
         to call this in a transaction.
@@ -304,8 +255,9 @@ class ItemDB:
 
     def delete_table(self, table_name):
         """ Delete the table with the given name.
-        Warning: this deletes the whole table, including all its items.
         This method must be called within a transaction.
+
+        Warning: this deletes the whole table, including all of its items.
 
         Can raise KeyError if an invalid table is given, or IOError if not
         used within a transaction
@@ -346,6 +298,17 @@ class ItemDB:
     def count(self, table_name, query, *args):
         """ Get the number of items in the given table that match the given query.
 
+        Examples::
+
+            # Count the persons older than 20
+            db.count("persons", "age > 20")
+            # Use parameters for variables (to avoid SQL injection)
+            db.count("persons", "age > ?", min_age)
+            # Use AND and OR for more precise queries
+            db.count("persons", "age > ? AND age < ?", min_age, max_age)
+
+        See select() for details on queries.
+
         Can raise KeyError if an invalid table is given, IndexError if an
         invalid field is used in the query, or sqlite3.OperationalError for
         an invalid query.
@@ -363,7 +326,7 @@ class ItemDB:
             cur.close()
 
     def select_all(self, table_name):
-        """ Get all items in the given table.
+        """ Get all items in the given table. See select() for details.
         """
         self.get_indices(table_name)  # Fail with KeyError for invalid table name
         cur = self._conn.cursor()
@@ -376,13 +339,25 @@ class ItemDB:
     def select(self, table_name, query, *args):
         """ Get the items in the given table that match the given query.
 
-        The query follows SQLite syntax and can only include indexed fields.
-        Therefore the query is always fast (which is why this method is called
-        select, and not search). To filter items bases on non-indexed fields,
-        use a list comprehension, e.g.:
+        The query follows SQLite syntax and can only include indexed
+        fields. If needed, use ensure_table() to add indices. The query
+        is always fast (which is why this method is called select, and
+        not search).
 
-            items = db.select("table_name", ...)  # or select_all("table_name")
-            items = [i for i in items if i["value"] > 100]
+        Examples::
+
+            # Select the persons older than 20
+            db.select("persons", "age > 20")
+            # Use parameters for variables (to avoid SQL injection)
+            db.select("persons", "age > ?", min_age)
+            # Use AND and OR for more precise queries
+            db.select("persons", "age > ? AND age < ?", min_age, max_age)
+
+        There is no method to filter items bases on non-indexed fields,
+        because this is easy using a list comprehension, e.g.::
+
+            items = db.select_all("persons")
+            items = [i for i in items if i["age"] > 20]
 
         Can raise KeyError if an invalid table is given, IndexError if an
         invalid field is used in the query, or sqlite3.OperationalError for
@@ -405,7 +380,7 @@ class ItemDB:
 
     def select_one(self, table_name, query, *args):
         """ Get the first item in the given table that match the given query.
-        Returns None if there was no match.
+        Returns None if there was no match. See select() for details.
         """
         items = self.select(table_name, query, *args)
         return items[0] if items else None
@@ -454,9 +429,19 @@ class ItemDB:
         self.put(table_name, item)
 
     def delete(self, table_name, query, *args):
-        """ Delete items from the given table. This works similar to select(),
-        except that matching items are deleted instead of returned.
+        """ Delete items from the given table.
         This method must be called within a transaction.
+
+        Examples::
+
+            # Delete the persons older than 20
+            db.delete("persons", "age > 20")
+            # Use parameters for variables (to avoid SQL injection)
+            db.delete("persons", "age > ?", min_age)
+            # Use AND and OR for more precise queries
+            db.delete("persons", "age > ? AND age < ?", min_age, max_age)
+
+        See select() for details on queries.
 
         Can raise KeyError if an invalid table is given, IOError if not
         used within a transaction, IndexError if an invalid field is
