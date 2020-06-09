@@ -70,5 +70,5 @@ MIT
 ## Developers
 
 * Run `black .` to autoformat.
-* Run `flake8 . --max-line-length=100` to lint.
+* Run `flake8 . --max-line-length=99` to lint.
 * Run `pytest .` to run unit tests.
