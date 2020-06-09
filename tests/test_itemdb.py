@@ -494,7 +494,7 @@ def test_transactions2():
         t.join()
 
     assert len(read) == 30
-    assert 12 <= read.count(10) <= 22
+    assert 5 <= read.count(10) <= 22
     assert 2 <= read.count(20) <= 6
     assert read.count(30) >= 5
 
