@@ -1,4 +1,4 @@
-# Copyright (c) 2019-2020 Almar Klein - This code is subject to the MIT license
+# Copyright (c) 2019-2021 Almar Klein - This code is subject to the MIT license
 """
 The itemdb library allows you to store and retrieve Python dicts in a
 database on the local filesystem, in an easy, fast, and reliable way.
@@ -9,7 +9,10 @@ object-based API, with the flexibility to store (JSON-compatible) items
 with arbitrary fields, and add indices when needed.
 """
 
+import os
+import sys
 import json
+import queue
 import asyncio
 import sqlite3
 import threading
@@ -18,6 +21,7 @@ import threading
 __version__ = "1.0.1"
 version_info = tuple(map(int, __version__.split(".")))
 
+__all__ = ["ItemDB", "AsyncItemDB", "asyncify"]
 
 json_encode = json.JSONEncoder(ensure_ascii=True).encode
 json_decode = json.JSONDecoder().decode
@@ -38,7 +42,7 @@ json_decode = json.JSONDecoder().decode
 
 
 def asyncify(func):
-    """ Wrap a normal function into an awaitable co-routine. Can be used
+    """Wrap a normal function into an awaitable co-routine. Can be used
     as a decorator.
 
     The original function will be executed in a separate thread. This
@@ -72,7 +76,7 @@ def asyncify(func):
 
 
 class ItemDB:
-    """ A transactional database for storage and retrieval of dict items.
+    """A transactional database for storage and retrieval of dict items.
 
     The items in the database can be any JSON serializable dictionary.
     Indices can be defined for specific fields to enable fast selection
@@ -84,11 +88,22 @@ class ItemDB:
     """
 
     def __init__(self, filename):
+        self._mtime = -1
+        if os.path.isfile(filename):
+            self._mtime = os.path.getmtime(filename)
         self._conn = sqlite3.connect(
             filename, timeout=60, isolation_level=None, check_same_thread=False
         )
         self._cur = None
         self._indices_per_table = {}
+
+    @property
+    def mtime(self):
+        """The time that the database file was last modified, as a Unix timestamp.
+        Is -1 if the file did not exist, or if the filename is not represented
+        on the filesystem.
+        """
+        return self._mtime
 
     def __enter__(self):
         if self._cur is not None:
@@ -110,15 +125,14 @@ class ItemDB:
         self._conn.close()
 
     def close(self):
-        """ Close the database connection. This will be automatically
+        """Close the database connection. This will be automatically
         called when the instance is deleted. But since it can be held
         e.g. in a traceback, consider using ``with closing(db):``.
         """
         self._conn.close()
 
     def get_table_names(self):
-        """ Return a (sorted) list of table names present in the database.
-        """
+        """Return a (sorted) list of table names present in the database."""
         cur = self._conn.cursor()
         try:
             cur.execute("SELECT name FROM sqlite_master WHERE type='table';")
@@ -128,7 +142,7 @@ class ItemDB:
         return list(sorted(table_names))
 
     def get_indices(self, table_name):
-        """ Get a set of indices for the given table. Names prefixed with "!"
+        """Get a set of indices for the given table. Names prefixed with "!"
         represent fields that are required and unique. Raises KeyError if the
         table does not exist.
         """
@@ -163,7 +177,7 @@ class ItemDB:
             raise KeyError(f"Table {table_name} not present, maybe use ensure_table()?")
 
     def ensure_table(self, table_name, *indices):
-        """ Ensure that the given table exists and has the given indices.
+        """Ensure that the given table exists and has the given indices.
 
         If an index name is prefixed with "!", it indicates a field that is
         mandatory and unique. Note that new unique indices cannot be added
@@ -209,8 +223,7 @@ class ItemDB:
         self.put(table_name, *items)
 
     def _ensure_table_helper2(self, table_name, indices):
-        """ Slow version to ensure table.
-        """
+        """Slow version to ensure table."""
 
         cur = self._cur
 
@@ -254,7 +267,7 @@ class ItemDB:
             )
 
     def delete_table(self, table_name):
-        """ Delete the table with the given name.
+        """Delete the table with the given name.
         This method must be called within a transaction.
 
         Warning: this deletes the whole table, including all of its items.
@@ -270,7 +283,7 @@ class ItemDB:
         self._cur.execute(f"DROP TABLE {table_name}")
 
     def rename_table(self, table_name, new_table_name):
-        """ Rename a table. This method must be called within a transaction.
+        """Rename a table. This method must be called within a transaction.
 
         Can raise KeyError if an invalid table is given, or IOError if not
         used within a transaction
@@ -285,8 +298,7 @@ class ItemDB:
         self._cur.execute(f"ALTER TABLE {table_name} RENAME TO {new_table_name}")
 
     def count_all(self, table_name):
-        """ Get the total number of items in the given table.
-        """
+        """Get the total number of items in the given table."""
         self.get_indices(table_name)  # Fail with KeyError for invalid table name
         cur = self._conn.cursor()
         try:
@@ -296,7 +308,7 @@ class ItemDB:
             cur.close()
 
     def count(self, table_name, query, *args):
-        """ Get the number of items in the given table that match the given query.
+        """Get the number of items in the given table that match the given query.
 
         Examples::
 
@@ -326,8 +338,7 @@ class ItemDB:
             cur.close()
 
     def select_all(self, table_name):
-        """ Get all items in the given table. See select() for details.
-        """
+        """Get all items in the given table. See select() for details."""
         self.get_indices(table_name)  # Fail with KeyError for invalid table name
         cur = self._conn.cursor()
         try:
@@ -337,7 +348,7 @@ class ItemDB:
             cur.close()
 
     def select(self, table_name, query, *args):
-        """ Get the items in the given table that match the given query.
+        """Get the items in the given table that match the given query.
 
         The query follows SQLite syntax and can only include indexed
         fields. If needed, use ensure_table() to add indices. The query
@@ -379,14 +390,14 @@ class ItemDB:
             cur.close()
 
     def select_one(self, table_name, query, *args):
-        """ Get the first item in the given table that match the given query.
+        """Get the first item in the given table that match the given query.
         Returns None if there was no match. See select() for details.
         """
         items = self.select(table_name, query, *args)
         return items[0] if items else None
 
     def put(self, table_name, *items):
-        """ Put one or more items into the given table.
+        """Put one or more items into the given table.
         This method must be called within a transaction.
 
         Can raise KeyError if an invalid table is given, IOError if not
@@ -423,13 +434,13 @@ class ItemDB:
             )
 
     def put_one(self, table_name, **item):
-        """ Put an item into the given table using kwargs.
+        """Put an item into the given table using kwargs.
         This method must be called within a transaction.
         """
         self.put(table_name, item)
 
     def delete(self, table_name, query, *args):
-        """ Delete items from the given table.
+        """Delete items from the given table.
         This method must be called within a transaction.
 
         Examples::
@@ -460,3 +471,124 @@ class ItemDB:
             raise err
         finally:
             cur.close()
+
+
+class AsyncItemDB:
+    """An async version of ItemDB. The API is exactly the same, except
+    that all methods are async, and one must use `async with` instead
+    of the normal `with`.
+    """
+
+    async def __new__(cls, filename):
+        if sys.version_info < (3, 7):
+            raise RuntimeError("Need py37+ for AsyncItemDB")
+        self = super().__new__(cls)
+        self._queue = queue.Queue()
+        self._thread = Thread4AsyncItemDB(self._queue)
+        self._thread.start()
+        self.db = self._thread.db = await self._handle(ItemDB, filename)
+        return self
+
+    @property
+    def mtime(self):
+        return self.db.mtime
+
+    async def _handle(self, function, *args, **kwargs):
+        future = asyncio.get_event_loop().create_future()
+        self._queue.put_nowait((future, function, args, kwargs))
+        return await future
+
+    async def __aenter__(self):
+        return await self._handle(self.db.__enter__)
+
+    async def __aexit__(self, type, value, traceback):
+        return await self._handle(self.db.__exit__, type, value, traceback)
+
+    def __del__(self):
+        future = asyncio.get_event_loop().create_future()
+        self._queue.put_nowait((future, self.db.close, (), {}))
+        self._queue.put_nowait((None, None, None, None))
+
+    async def close(self):
+        future = asyncio.get_event_loop().create_future()
+        self._queue.put_nowait((future, self.db.close, (), {}))
+        self._queue.put_nowait((None, None, None, None))
+        return await future
+
+    async def get_table_names(self, *args, **kwargs):
+        return await self._handle(self.db.get_table_names, *args, **kwargs)
+
+    async def get_indices(self, *args, **kwargs):
+        return await self._handle(self.db.get_indices, *args, **kwargs)
+
+    async def ensure_table(self, *args, **kwargs):
+        return await self._handle(self.db.ensure_table, *args, **kwargs)
+
+    async def delete_table(self, *args, **kwargs):
+        return await self._handle(self.db.delete_table, *args, **kwargs)
+
+    async def rename_table(self, *args, **kwargs):
+        return await self._handle(self.db.rename_table, *args, **kwargs)
+
+    async def count_all(self, *args, **kwargs):
+        return await self._handle(self.db.count_all, *args, **kwargs)
+
+    async def count(self, *args, **kwargs):
+        return await self._handle(self.db.count, *args, **kwargs)
+
+    async def select_all(self, *args, **kwargs):
+        return await self._handle(self.db.select_all, *args, **kwargs)
+
+    async def select(self, *args, **kwargs):
+        return await self._handle(self.db.select, *args, **kwargs)
+
+    async def select_one(self, *args, **kwargs):
+        return await self._handle(self.db.select_one, *args, **kwargs)
+
+    async def put(self, *args, **kwargs):
+        return await self._handle(self.db.put, *args, **kwargs)
+
+    async def put_one(self, *args, **kwargs):
+        return await self._handle(self.db.put_one, *args, **kwargs)
+
+    async def delete(self, *args, **kwargs):
+        return await self._handle(self.db.delete, *args, **kwargs)
+
+
+class Thread4AsyncItemDB(threading.Thread):
+    """Thread that does the work for the AsyncItemDB."""
+
+    _count = 0
+
+    def __init__(self, queue):
+        Thread4AsyncItemDB._count += 1
+        super().__init__(name=f"AsyncItemDB_{Thread4AsyncItemDB._count}")
+        self.daemon = True
+        self._queue = queue
+        self.db = None
+
+    def run(self) -> None:
+
+        while True:
+            # Continues running until all queue items are processed,
+            # even after closed (so we can finalize all futures)
+            future, function, args, kwargs = self._queue.get()
+            if future is None:
+                break
+
+            try:
+                result = function(*args, **kwargs)
+
+                def set_result(fut, result):
+                    if not fut.done():
+                        fut.set_result(result)
+
+                future.get_loop().call_soon_threadsafe(set_result, future, result)
+
+            except BaseException as e:
+
+                def set_exception(fut, e):
+                    if not fut.done():
+                        fut.set_exception(e)
+
+                future.get_loop().call_soon_threadsafe(set_exception, future, e)

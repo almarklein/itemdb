@@ -3,8 +3,10 @@ import asyncio
 import threading
 import concurrent
 
-from testutils import run_tests
+import itemdb
 
+
+# %% More theoretical test, without using an actual ItemDB
 
 executor = concurrent.futures.ThreadPoolExecutor(
     max_workers=None, thread_name_prefix="itemdb"
@@ -53,7 +55,7 @@ async def do_some_work(method_name):
     return etime / n
 
 
-def test_speed_of_async():
+def check_speed_of_async():
     # Try out multiple ways to implement async. The overhead for the threading
     # is in favor of the thread pool, but it's really tiny, in the order of 100us.
     # Plus starting 40 threads might be overkill on many cases too. Creating
@@ -70,5 +72,63 @@ def test_speed_of_async():
         print(method_name, t)
 
 
+# %% Practical test, comparing asyncify vs AsyncItemDB
+
+
+async def do_work_using_asyncify():
+    def work():
+        db = itemdb.ItemDB(":memory:")
+        db.ensure_table("items")
+        with db:
+            db.put_one("items", id=1, name="foo")
+            db.put_one("items", id=1, name="bar")
+
+    await itemdb.asyncify(work)()
+
+
+async def do_work_using_asyncitemdb():
+    async def work():
+        db = await itemdb.AsyncItemDB(":memory:")
+        await db.ensure_table("items")
+        async with db:
+            await db.put_one("items", id=1, name="foo")
+            await db.put_one("items", id=1, name="bar")
+
+    await work()
+
+
+def check_speed_of_async_itemdb():
+    co = _check_speed_of_async_itemdb()
+    asyncio.get_event_loop().run_until_complete(co)
+
+
+async def _check_speed_of_async_itemdb():
+    # The AsyncItemDB approach is less efficient than using asyncify.
+    # The amount differs a lot between runs, but ranges from 20-30% with the
+    # current measurement. Using a threadpool with AsyncItemDB might reduce
+    # this discrepancy. Note that aiosqlite also uses a new thread per connection.
+
+    n = 500
+
+    time.sleep(0.1)
+    t0 = time.perf_counter()
+
+    for i in range(n):
+        await do_work_using_asyncify()
+
+    t1 = time.perf_counter()
+    print(f"with asyncify:    {(t1 - t0)/n:0.9f} s")
+
+    time.sleep(0.1)
+    t0 = time.perf_counter()
+
+    for i in range(n):
+        await do_work_using_asyncitemdb()
+
+    t1 = time.perf_counter()
+    print(f"with AsyncItemDB: {(t1 - t0)/n:0.9f} s")
+
+
 if __name__ == "__main__":
-    run_tests(globals())
+    check_speed_of_async()
+    check_speed_of_async_itemdb()

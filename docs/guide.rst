@@ -195,13 +195,16 @@ Going Async
 -----------
 
 The API of ``ItemDB`` is synchronous. It operates with the filesystem, so
-it can benefit from async use a lot. At the time of writing, we do not provide
-an async API because it would make the API more complex. Instead, itemdb provides
-a function to asyncify a synchronous function.
+it can benefit from async use a lot.
 
-The idea is to do all itemdb operations inside a function and then wrap
-that function if you want to use it in an async environment. Consider
-the following example of a web server:
+There are two ways to make your code async. The first is by using the
+``AsyncItemDB`` class. It has the exact same API as ``ItemDB``, but all its
+methods are async. Note that you must also use ``async with``.
+
+The second approach is to asyncify a synchronous function. The idea of
+this approach is to do all itemdb operations inside a function and then
+wrap that function if you want to use it in an async environment.
+Consider the following example of a web server:
 
 .. code-block:: python
 
@@ -221,3 +224,9 @@ the following example of a web server:
         # occurs in a separate thread.
         await push_items(filename, items)
         ...
+
+Of the two mentioned approaches, the asyncify-approach is slightly
+more efficient, because it makes use of a thread pool, and only switches
+to a thread for the duration of the function you've asyncified. However,
+using ``AsyncItemDB`` probably makes your code easier to read and
+maintain, which is probably worth more.

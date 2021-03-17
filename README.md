@@ -27,8 +27,10 @@ pip install itemdb
 ## Quick usage example
 
 ```py
+import itemdb
+
 # Open the database and make sure there is a table with appopriate indices
-db = ItemDB(":memory:")
+db = itemdb.ItemDB(":memory:")
 db.ensure_table("persons", "!name", "age")
 
 # Add some items to the db
@@ -51,8 +53,21 @@ See the [guide](https://itemdb.readthedocs.io/en/latest/guide.html) for details.
 
 ## Async
 
-The `ItemDB` class does not provide an async API. Instead this lib
-provides a decorator to turn a normal function into an async one
+The `AsyncItemDB` class provides the same API, but async:
+
+```py
+import itemdb
+
+db = await itemdb.AsyncItemDB("memory")
+await db.ensure_table("persons", "!name", "age")
+
+async with db:
+    await db.put_one("persons", name="Jane", age=22)
+
+...
+```
+
+Alternatively, a decorator is provided to turn a normal function into an async one
 (running in a separate thread).
 
 ```py

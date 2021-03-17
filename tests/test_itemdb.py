@@ -572,7 +572,7 @@ def test_database_race_conditions():
 
 
 def test_threaded_access():
-    """ This was an attempt to reproduce an error that turned out to be related
+    """This was an attempt to reproduce an error that turned out to be related
     to the discrepancy between os.path.getmtime and server_time. This test helped
     establish that it was not in itemdb.
     """

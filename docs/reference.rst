@@ -9,6 +9,13 @@ The ItemDB class
     :members:
 
 
+The AsyncItemDB class
+---------------------
+
+.. autoclass:: itemdb.AsyncItemDB
+    :members:
+
+
 The asyncify function
 ---------------------
 
