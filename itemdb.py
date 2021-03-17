@@ -9,6 +9,7 @@ object-based API, with the flexibility to store (JSON-compatible) items
 with arbitrary fields, and add indices when needed.
 """
 
+import sys
 import json
 import queue
 import asyncio
