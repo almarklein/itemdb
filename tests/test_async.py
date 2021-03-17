@@ -165,6 +165,7 @@ async def _test_AsyncItemDB():
         await db.delete("items", "id == 3")
     assert (await db.select_one("items", "id == 3")) is None
 
+    assert db.mtime == -1
     await db.close()
 
     # ----- Transactions

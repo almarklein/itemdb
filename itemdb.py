@@ -9,6 +9,7 @@ object-based API, with the flexibility to store (JSON-compatible) items
 with arbitrary fields, and add indices when needed.
 """
 
+import os
 import sys
 import json
 import queue
@@ -87,11 +88,22 @@ class ItemDB:
     """
 
     def __init__(self, filename):
+        self._mtime = -1
+        if os.path.isfile(filename):
+            self._mtime = os.path.getmtime(filename)
         self._conn = sqlite3.connect(
             filename, timeout=60, isolation_level=None, check_same_thread=False
         )
         self._cur = None
         self._indices_per_table = {}
+
+    @property
+    def mtime(self):
+        """The time that the database file was last modified, as a Unix timestamp.
+        Is -1 if the file did not exist, or if the filename is not represented
+        on the filesystem.
+        """
+        return self._mtime
 
     def __enter__(self):
         if self._cur is not None:
@@ -477,6 +489,10 @@ class AsyncItemDB:
         self.db = self._thread.db = await self._handle(ItemDB, filename)
         return self
 
+    @property
+    def mtime(self):
+        return self.db.mtime
+
     async def _handle(self, function, *args, **kwargs):
         future = asyncio.get_event_loop().create_future()
         self._queue.put_nowait((future, function, args, kwargs))
@@ -489,10 +505,15 @@ class AsyncItemDB:
         return await self._handle(self.db.__exit__, type, value, traceback)
 
     def __del__(self):
-        self._thread._running = False
+        future = asyncio.get_event_loop().create_future()
+        self._queue.put_nowait((future, self.db.close, (), {}))
+        self._queue.put_nowait((None, None, None, None))
 
     async def close(self):
-        self._thread._running = False
+        future = asyncio.get_event_loop().create_future()
+        self._queue.put_nowait((future, self.db.close, (), {}))
+        self._queue.put_nowait((None, None, None, None))
+        return await future
 
     async def get_table_names(self, *args, **kwargs):
         return await self._handle(self.db.get_table_names, *args, **kwargs)
@@ -544,7 +565,6 @@ class Thread4AsyncItemDB(threading.Thread):
         super().__init__(name=f"AsyncItemDB_{Thread4AsyncItemDB._count}")
         self.daemon = True
         self._queue = queue
-        self._running = True
         self.db = None
 
     def run(self) -> None:
@@ -552,12 +572,10 @@ class Thread4AsyncItemDB(threading.Thread):
         while True:
             # Continues running until all queue items are processed,
             # even after closed (so we can finalize all futures)
-            try:
-                future, function, args, kwargs = self._queue.get(timeout=0.1)
-            except queue.Empty:
-                if self._running:
-                    continue
+            future, function, args, kwargs = self._queue.get()
+            if future is None:
                 break
+
             try:
                 result = function(*args, **kwargs)
 
@@ -566,6 +584,7 @@ class Thread4AsyncItemDB(threading.Thread):
                         fut.set_result(result)
 
                 future.get_loop().call_soon_threadsafe(set_result, future, result)
+
             except BaseException as e:
 
                 def set_exception(fut, e):
@@ -573,8 +592,3 @@ class Thread4AsyncItemDB(threading.Thread):
                         fut.set_exception(e)
 
                 future.get_loop().call_soon_threadsafe(set_exception, future, e)
-
-        # Close the database
-        if self.db:
-            self.db.close()
-        self.db = None
