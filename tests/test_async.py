@@ -1,9 +1,10 @@
 import gc
+import sys
 import time
 import asyncio
 import threading
 
-from pytest import raises
+from pytest import raises, skip
 
 from testutils import run_tests
 from itemdb import asyncify, ItemDB, AsyncItemDB
@@ -86,6 +87,9 @@ def test_AsyncItemDB_methods():
 
 
 def test_AsyncItemDB_threads():
+    if sys.version_info < (3, 7):
+        skip("Need py37+ for AsyncItemDB")
+
     time.sleep(0.1)
     assert threading.active_count() < 20
 
@@ -118,6 +122,8 @@ async def _test_AsyncItemDB_threads():
 
 
 def test_AsyncItemDB():
+    if sys.version_info < (3, 7):
+        skip("Need py37+ for AsyncItemDB")
     swait(_test_AsyncItemDB())
 
 

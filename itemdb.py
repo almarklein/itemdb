@@ -467,6 +467,8 @@ class AsyncItemDB:
     """
 
     async def __new__(cls, filename):
+        if sys.version_info < (3, 7):
+            raise RuntimeError("Need py37+ for AsyncItemDB")
         self = super().__new__(cls)
         self._queue = queue.Queue()
         self._thread = Thread4AsyncItemDB(self._queue)
