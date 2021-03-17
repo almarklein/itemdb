@@ -58,7 +58,7 @@ The `AsyncItemDB` class provides the same API, but async:
 ```py
 import itemdb
 
-db = await itemdb.AsyncItemDB("memory")
+db = await itemdb.AsyncItemDB(":memory:")
 await db.ensure_table("persons", "!name", "age")
 
 async with db:
