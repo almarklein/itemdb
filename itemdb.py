@@ -26,6 +26,8 @@ __all__ = ["ItemDB", "AsyncItemDB", "asyncify"]
 json_encode = json.JSONEncoder(ensure_ascii=True).encode
 json_decode = json.JSONDecoder().decode
 
+is_py36 = sys.version_info < (3, 7)
+
 
 # Notes:
 #
@@ -480,8 +482,6 @@ class AsyncItemDB:
     """
 
     async def __new__(cls, filename):
-        if sys.version_info < (3, 7):
-            raise RuntimeError("Need py37+ for AsyncItemDB")
         self = super().__new__(cls)
         self._queue = queue.Queue()
         self._thread = Thread4AsyncItemDB(self._queue)
@@ -583,7 +583,8 @@ class Thread4AsyncItemDB(threading.Thread):
                     if not fut.done():
                         fut.set_result(result)
 
-                future.get_loop().call_soon_threadsafe(set_result, future, result)
+                loop = future._loop if is_py36 else future.get_loop()
+                loop.call_soon_threadsafe(set_result, future, result)
 
             except BaseException as e:
 
@@ -591,4 +592,5 @@ class Thread4AsyncItemDB(threading.Thread):
                     if not fut.done():
                         fut.set_exception(e)
 
-                future.get_loop().call_soon_threadsafe(set_exception, future, e)
+                loop = future._loop if is_py36 else future.get_loop()
+                loop.call_soon_threadsafe(set_exception, future, e)
