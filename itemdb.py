@@ -583,7 +583,8 @@ class Thread4AsyncItemDB(threading.Thread):
                     if not fut.done():
                         fut.set_result(result)
 
-                future.get_loop().call_soon_threadsafe(set_result, future, result)
+                loop = future._loop if is_py36 else future.get_loop()
+                loop.call_soon_threadsafe(set_result, future, result)
 
             except BaseException as e:
 
