@@ -1,5 +1,5 @@
 [![PyPI Version](https://img.shields.io/pypi/v/itemdb.svg)](https://pypi.python.org/pypi/itemdb/)
-![CI](https://github.com/almarklein/itemdb/workflows/CI/badge.svg)
+[![CI](https://github.com/almarklein/itemdb/workflows/CI/badge.svg)](https://github.com/almarklein/itemdb/actions)
 [![Documentation Status](https://readthedocs.org/projects/itemdb/badge/?version=latest)](https://itemdb.readthedocs.io/en/latest/?badge=latest)
 
 # itemdb
