@@ -23,12 +23,12 @@ def plain_func_that_errors(x):
 
 
 def swait(co):
-    """ Sync-wait for the given coroutine, and return the result. """
+    """Sync-wait for the given coroutine, and return the result."""
     return asyncio.get_event_loop().run_until_complete(co)
 
 
 def swait_multiple(cos):
-    """ Sync-wait for the given coroutines. """
+    """Sync-wait for the given coroutines."""
     asyncio.get_event_loop().run_until_complete(asyncio.wait(cos))
 
 
