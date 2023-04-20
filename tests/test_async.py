@@ -29,7 +29,8 @@ def swait(co):
 
 def swait_multiple(cos):
     """Sync-wait for the given coroutines."""
-    asyncio.get_event_loop().run_until_complete(asyncio.wait(cos))
+    # asyncio.get_event_loop().run_until_complete(asyncio.wait(cos))  # stopped working
+    asyncio.get_event_loop().run_until_complete(asyncio.gather(*cos))
 
 
 def test_asyncify1():
