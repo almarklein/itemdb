@@ -45,7 +45,7 @@ with db:
 
 # Query items
 db.count_all("persons")  # -> 4
-db.select("persons", "age > 20")  # -> list of 2 items
+db.select("persons", "age > ?", 20)  # -> list of 2 items
 ```
 
 See the [guide](https://itemdb.readthedocs.io/en/latest/guide.html) for details.

@@ -126,7 +126,7 @@ Use e.g. ``count()``, ``select()`` to query the database:
     >>> db.count_all("persons")
     4
 
-    >>> db.select("persons", "age > 20")
+    >>> db.select("persons", "age > ?", 20)
     [{'name': 'Jane', 'age': 22}, {'name': 'Anne', 'age': 42}]
 
     >>> select_name = "John"

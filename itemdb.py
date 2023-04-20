@@ -569,8 +569,8 @@ class ItemDB:
         Examples::
 
             # Delete the persons older than 20
-            db.delete("persons", "age > 20")
-            # Use parameters for variables (to avoid SQL injection)
+            db.delete("persons", "age > ?", 20)
+            #  Delete the persons older than a given age
             db.delete("persons", "age > ?", min_age)
             # Use AND and OR for more precise queries
             db.delete("persons", "age > ? AND age < ?", min_age, max_age)
