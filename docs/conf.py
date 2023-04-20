@@ -22,7 +22,7 @@ import itemdb  # noqa: E402
 # -- Project information -----------------------------------------------------
 
 project = "itemdb"
-copyright = "2018-2020, Almar Klein"
+copyright = "2018-2023, Almar Klein"
 author = "Almar Klein"
 release = itemdb.__version__
 
