@@ -80,6 +80,12 @@ def asyncify(func):
 class ItemDB:
     """A transactional database for storage and retrieval of dict items.
 
+    Parameters
+    ----------
+    filename : str
+        The file to open. Use ":memory:" for an in-memory db.
+
+
     The items in the database can be any JSON serializable dictionary.
     Indices can be defined for specific fields to enable fast selection
     of items based on these fields. Indices can be marked as unique to
@@ -102,6 +108,7 @@ class ItemDB:
     @property
     def mtime(self):
         """The time that the database file was last modified, as a Unix timestamp.
+
         Is -1 if the file did not exist, or if the filename is not represented
         on the filesystem.
         """
@@ -127,9 +134,11 @@ class ItemDB:
         self._conn.close()
 
     def close(self):
-        """Close the database connection. This will be automatically
-        called when the instance is deleted. But since it can be held
-        e.g. in a traceback, consider using ``with closing(db):``.
+        """Close the database connection.
+
+        This will be automatically called when the instance is deleted.
+        But since it can be held e.g. in a traceback, consider using
+        ``with closing(db):``.
         """
         self._conn.close()
 
@@ -144,9 +153,17 @@ class ItemDB:
         return list(sorted(table_names))
 
     def get_indices(self, table_name):
-        """Get a set of indices for the given table. Names prefixed with "!"
-        represent fields that are required and unique. Raises KeyError if the
-        table does not exist.
+        """Get a set of index names for the given table.
+
+        Parameters
+        ----------
+        table_name : str
+            The name of the table to get the indices for.
+            *To avoid SQL injection, this arg should not be based on unsafe data.*
+
+
+        Names prefixed with "!" represent fields that are required and
+        unique. Raises KeyError if the table does not exist.
         """
         # Use cached?
         try:
@@ -180,6 +197,17 @@ class ItemDB:
 
     def ensure_table(self, table_name, *indices):
         """Ensure that the given table exists and has the given indices.
+
+        Parameters
+        ----------
+        table_name : str
+            The name of the table to make sure exists.
+            *To avoid SQL injection, this arg should not be based on unsafe data.*
+        indices : varargs
+            A sequence of strings, representing index names. Fields that are
+            indexed can be queried with e.g. ``select()``.
+            *To avoid SQL injection, this arg should not be based on unsafe data.*
+
 
         If an index name is prefixed with "!", it indicates a field that is
         mandatory and unique. Note that new unique indices cannot be added
@@ -243,10 +271,11 @@ class ItemDB:
         text = f"CREATE TABLE IF NOT EXISTS {table_name} (_ob TEXT NOT NULL"
         unique_keys = sorted(x.lstrip("!") for x in indices if x.startswith("!"))
         if len(unique_keys) == 1:
-            text += f", {unique_keys[0]} NOT NULL PRIMARY KEY) WITHOUT ROWID;"
+            index_key = unique_keys[0]
+            text += f", {index_key} NOT NULL PRIMARY KEY) WITHOUT ROWID;"
         else:
-            for key in unique_keys:
-                text += f", {key} NOT NULL UNIQUE"
+            for index_key in unique_keys:
+                text += f", {index_key} NOT NULL UNIQUE"
             text += ");"
         cur.execute(text)
 
@@ -255,7 +284,7 @@ class ItemDB:
         found_indices = {(x[3] * "!" + x[1]) for x in cur}
 
         for fieldname in sorted(indices):
-            key = fieldname.lstrip("!")
+            index_key = fieldname.lstrip("!")
             if fieldname not in found_indices:
                 if fieldname.startswith("!"):
                     raise IndexError(
@@ -263,19 +292,28 @@ class ItemDB:
                     )
                 elif fieldname in {x.lstrip("!") for x in found_indices}:
                     raise IndexError(f"Given index {fieldname!r} should be unique.")
-                cur.execute(f"ALTER TABLE {table_name} ADD {key};")
+                cur.execute(f"ALTER TABLE {table_name} ADD {index_key};")
+            cmd = "CREATE INDEX IF NOT EXISTS"
             cur.execute(
-                f"CREATE INDEX IF NOT EXISTS idx_{table_name}_{key} ON {table_name} ({key})"
+                f"{cmd} idx_{table_name}_{index_key} ON {table_name} ({index_key})"
             )
 
     def delete_table(self, table_name):
         """Delete the table with the given name.
-        This method must be called within a transaction.
 
-        Warning: this deletes the whole table, including all of its items.
+        Parameters
+        ----------
+        table_name : str
+            The name of the table to delete.
+            *To avoid SQL injection, this arg should not be based on unsafe data.*
 
-        Can raise KeyError if an invalid table is given, or IOError if not
-        used within a transaction
+
+        Be aware that this deletes the whole table, including all of
+        its items.
+
+        This method must be called within a transaction. Can raise
+        KeyError if an invalid table is given, or IOError if not used
+        within a transaction
         """
         self.get_indices(table_name)  # Fail with KeyError for invalid table name
         cur = self._cur
@@ -285,10 +323,21 @@ class ItemDB:
         self._cur.execute(f"DROP TABLE {table_name}")
 
     def rename_table(self, table_name, new_table_name):
-        """Rename a table. This method must be called within a transaction.
+        """Rename a table.
 
-        Can raise KeyError if an invalid table is given, or IOError if not
-        used within a transaction
+        Parameters
+        ----------
+        table_name : str
+            The current name of the table.
+            *To avoid SQL injection, this arg should not be based on unsafe data.*
+        new_table_name : str
+            The new name.
+            *To avoid SQL injection, this arg should not be based on unsafe data.*
+
+
+        This method must be called within a transaction. Can raise
+        KeyError if an invalid table is given, or IOError if not used
+        within a transaction
         """
         self.get_indices(table_name)  # Fail with KeyError for invalid table name
         if not (isinstance(new_table_name, str) and new_table_name.isidentifier()):
@@ -309,19 +358,32 @@ class ItemDB:
         finally:
             cur.close()
 
-    def count(self, table_name, query, *args):
+    def count(self, table_name, query, *save_args):
         """Get the number of items in the given table that match the given query.
+
+        Parameters
+        ----------
+        table_name : str
+            The name of the table to count items in.
+            *To avoid SQL injection, this arg should not be based on unsafe data.*
+        query : str
+            The query to select items on.
+            *To avoid SQL injection, this arg should not be based on unsafe data;
+            use save_args for end-user input.*
+        save_args : varargs
+            The values to select items on.
+
 
         Examples::
 
             # Count the persons older than 20
-            db.count("persons", "age > 20")
-            # Use parameters for variables (to avoid SQL injection)
+            db.count("persons", "age > ?", 20)
+            # Count the persons older than a given value
             db.count("persons", "age > ?", min_age)
             # Use AND and OR for more precise queries
             db.count("persons", "age > ? AND age < ?", min_age, max_age)
 
-        See select() for details on queries.
+        See ``select(``) for details on queries.
 
         Can raise KeyError if an invalid table is given, IndexError if an
         invalid field is used in the query, or sqlite3.OperationalError for
@@ -330,7 +392,7 @@ class ItemDB:
         self.get_indices(table_name)  # Fail with KeyError for invalid table name
         cur = self._conn.cursor()
         try:
-            cur.execute(f"SELECT COUNT(*) FROM {table_name} WHERE {query}", args)
+            cur.execute(f"SELECT COUNT(*) FROM {table_name} WHERE {query}", save_args)
             return cur.fetchone()[0]
         except sqlite3.OperationalError as err:
             if "no such column" in str(err).lower():
@@ -340,7 +402,7 @@ class ItemDB:
             cur.close()
 
     def select_all(self, table_name):
-        """Get all items in the given table. See select() for details."""
+        """Get all items in the given table. See ``select()`` for details."""
         self.get_indices(table_name)  # Fail with KeyError for invalid table name
         cur = self._conn.cursor()
         try:
@@ -349,19 +411,32 @@ class ItemDB:
         finally:
             cur.close()
 
-    def select(self, table_name, query, *args):
+    def select(self, table_name, query, *save_args):
         """Get the items in the given table that match the given query.
+
+        Parameters
+        ----------
+        table_name : str
+            The name of the table to select items in.
+            *To avoid SQL injection, this arg should not be based on unsafe data.*
+        query : str
+            The query to select items on.
+            *To avoid SQL injection, this arg should not be based on unsafe data;
+            use save_args for end-user input.*
+        save_args : varargs
+            The values to select items on.
+
 
         The query follows SQLite syntax and can only include indexed
         fields. If needed, use ensure_table() to add indices. The query
-        is always fast (which is why this method is called select, and
-        not search).
+        is always fast (which is why this method is called 'select', and
+        not 'search').
 
         Examples::
 
             # Select the persons older than 20
-            db.select("persons", "age > 20")
-            # Use parameters for variables (to avoid SQL injection)
+            db.select("persons", "age > ?",  20)
+            # Select the persons older than a given age
             db.select("persons", "age > ?", min_age)
             # Use AND and OR for more precise queries
             db.select("persons", "age > ? AND age < ?", min_age, max_age)
@@ -382,7 +457,7 @@ class ItemDB:
         # and not run through the end.
         cur = self._conn.cursor()
         try:
-            cur.execute(f"SELECT _ob FROM {table_name} WHERE {query}", args)
+            cur.execute(f"SELECT _ob FROM {table_name} WHERE {query}", save_args)
             return [json_decode(x[0]) for x in cur]
         except sqlite3.OperationalError as err:
             if "no such column" in str(err).lower():
@@ -393,17 +468,41 @@ class ItemDB:
 
     def select_one(self, table_name, query, *args):
         """Get the first item in the given table that match the given query.
-        Returns None if there was no match. See select() for details.
+
+        Parameters
+        ----------
+        table_name : str
+            The name of the table to select an item in.
+            *To avoid SQL injection, this arg should not be based on unsafe data.*
+        query : str
+            The query to select the item on.
+            *To avoid SQL injection, this arg should not be based on unsafe data;
+            use save_args for end-user input.*
+        save_args : varargs
+            The values to select the item on.
+
+
+        Returns None if there was no match. See ``select()`` for details.
         """
         items = self.select(table_name, query, *args)
         return items[0] if items else None
 
     def put(self, table_name, *items):
         """Put one or more items into the given table.
-        This method must be called within a transaction.
 
-        Can raise KeyError if an invalid table is given, IOError if not
-        used within a transaction, TypeError if an item is not a (JSON
+        Parameters
+        ----------
+        table_name : str
+            The name of the table to put the item(s) in.
+            *To avoid SQL injection, this arg should not be based on unsafe data.*
+        items : varargs
+            The dicts to add. Keys that match an index can later be used for
+            fast querying.
+
+
+        This method must be called within a transaction. Can raise
+        KeyError if an invalid table is given, IOError if not used
+        within a transaction, TypeError if an item is not a (JSON
         serializable) dict, or IndexError if an item does not have a
         required field.
         """
@@ -418,55 +517,78 @@ class ItemDB:
             if not isinstance(item, dict):
                 raise TypeError("Expecing each item to be a dict")
 
-            row_keys = "_ob"
+            index_keys = "_ob"
             row_plac = "?"
             row_vals = [json_encode(item)]  # Can raise TypeError
             for fieldname in indices:
-                key = fieldname.lstrip("!")
-                if key in item:
-                    row_keys += ", " + key
+                index_key = fieldname.lstrip("!")
+                if index_key in item:
+                    index_keys += ", " + index_key
                     row_plac += ", ?"
-                    row_vals.append(item[key])
+                    row_vals.append(item[index_key])
                 elif fieldname.startswith("!"):
-                    raise IndexError(f"Item does not have required field {key!r}")
+                    raise IndexError(f"Item does not have required field {index_key!r}")
 
             cur.execute(
-                f"INSERT OR REPLACE INTO {table_name} ({row_keys}) VALUES ({row_plac})",
+                f"INSERT OR REPLACE INTO {table_name} ({index_keys}) VALUES ({row_plac})",
                 row_vals,
             )
 
     def put_one(self, table_name, **item):
         """Put an item into the given table using kwargs.
+
+        Parameters
+        ----------
+        table_name : str
+            The name of the table to put the item(s) in.
+            *To avoid SQL injection, this arg should not be based on unsafe data.*
+        item : kwargs
+            The dict to add. Keys that match an index can later be used for
+            fast querying.
+
+
         This method must be called within a transaction.
         """
         self.put(table_name, item)
 
-    def delete(self, table_name, query, *args):
+    def delete(self, table_name, query, *save_args):
         """Delete items from the given table.
-        This method must be called within a transaction.
+
+        Parameters
+        ----------
+        table_name : str
+            The name of the table to delete items from.
+            *To avoid SQL injection, this arg should not be based on unsafe data.*
+        query : str
+            The query to select the items to delete.
+            *To avoid SQL injection, this arg should not be based on unsafe data;
+            use save_args for end-user input.*
+        save_args : varargs
+            The values to select the item on.
+
 
         Examples::
 
             # Delete the persons older than 20
-            db.delete("persons", "age > 20")
-            # Use parameters for variables (to avoid SQL injection)
+            db.delete("persons", "age > ?", 20)
+            #  Delete the persons older than a given age
             db.delete("persons", "age > ?", min_age)
             # Use AND and OR for more precise queries
             db.delete("persons", "age > ? AND age < ?", min_age, max_age)
 
-        See select() for details on queries.
+        See ``select()`` for details on queries.
 
-        Can raise KeyError if an invalid table is given, IOError if not
-        used within a transaction, IndexError if an invalid field is
-        used in the query, or sqlite3.OperationalError for an invalid
-        query.
+        This method must be called within a transaction. Can raise
+        KeyError if an invalid table is given, IOError if not used
+        within a transaction, IndexError if an invalid field is used
+        in the query, or sqlite3.OperationalError for an invalid query.
         """
         self.get_indices(table_name)  # Fail with KeyError for invalid table name
         cur = self._cur
         if cur is None:
             raise IOError("Can only use delete() within a transaction.")
         try:
-            cur.execute(f"DELETE FROM {table_name} WHERE {query}", args)
+            cur.execute(f"DELETE FROM {table_name} WHERE {query}", save_args)
         except sqlite3.OperationalError as err:
             if "no such column" in str(err).lower():
                 raise IndexError(str(err))
@@ -568,7 +690,6 @@ class Thread4AsyncItemDB(threading.Thread):
         self.db = None
 
     def run(self) -> None:
-
         while True:
             # Continues running until all queue items are processed,
             # even after closed (so we can finalize all futures)

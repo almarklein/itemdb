@@ -29,7 +29,8 @@ def swait(co):
 
 def swait_multiple(cos):
     """Sync-wait for the given coroutines."""
-    asyncio.get_event_loop().run_until_complete(asyncio.wait(cos))
+    # asyncio.get_event_loop().run_until_complete(asyncio.wait(cos))  # stopped working
+    asyncio.get_event_loop().run_until_complete(asyncio.gather(*cos))
 
 
 def test_asyncify1():
@@ -76,7 +77,6 @@ def test_asyncif2():
 
 
 def test_AsyncItemDB_methods():
-
     methods1 = set(ItemDB.__dict__.keys())
     methods2 = set(AsyncItemDB.__dict__.keys())
     for name in methods1:
@@ -86,7 +86,6 @@ def test_AsyncItemDB_methods():
 
 
 def test_AsyncItemDB_threads():
-
     time.sleep(0.1)
     assert threading.active_count() < 20
 

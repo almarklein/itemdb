@@ -23,7 +23,6 @@ def get_fresh_filename():
 
 
 def test_init_read():
-
     # Empty database, zero tables
 
     db = ItemDB(":memory:")
@@ -45,7 +44,6 @@ def test_init_read():
 
 
 def test_index_fails():
-
     # Invalid index/table names - not str
     db = ItemDB(":memory:")
     for name in [(), 4, b"", [], {}]:
@@ -68,7 +66,6 @@ def test_index_fails():
     filename = get_fresh_filename()
     db = ItemDB(filename).ensure_table("foo", "meh")
     with closing(db):
-
         assert "foo" in db.get_table_names()
 
         with raises(IndexError):
@@ -79,7 +76,6 @@ def test_index_fails():
     filename = get_fresh_filename()
     db = ItemDB(filename).ensure_table("foo", "key")
     with closing(db):
-
         assert "foo" in db.get_table_names()
 
         with raises(IndexError):
@@ -90,7 +86,6 @@ def test_index_fails():
     filename = get_fresh_filename()
     db = ItemDB(filename).ensure_table("foo", "!key")
     with closing(db):
-
         assert "foo" in db.get_table_names()
 
         with raises(IndexError):
@@ -144,7 +139,6 @@ def test_init_write():
 
 
 def test_multiple_unique_keys():
-
     db = ItemDB(":memory:").ensure_table("items", "!id1", "!id2")
 
     with db:
@@ -159,7 +153,6 @@ def test_multiple_unique_keys():
 
 
 def test_missing_values1():
-
     filename = get_fresh_filename()
 
     db = ItemDB(filename).ensure_table("items", "!id", "mt")
@@ -198,7 +191,6 @@ def test_missing_values1():
 
 
 def test_missing_values2():
-
     filename = get_fresh_filename()
 
     db = ItemDB(filename)
@@ -236,7 +228,6 @@ def test_missing_values2():
 
 
 def test_usage_items():
-
     db = ItemDB(":memory:").ensure_table("items", "!id", "mt", "value")
 
     # Need id
@@ -279,7 +270,6 @@ def test_usage_items():
 
 
 def test_usage_settings():
-
     db = ItemDB(":memory:").ensure_table("settings", "!id", "mt", "value")
 
     # Need id
@@ -316,7 +306,6 @@ def test_usage_settings():
 
 
 def test_multiple_items():
-
     filename = get_fresh_filename()
 
     db = ItemDB(filename)
@@ -382,7 +371,6 @@ def test_multiple_items():
 
 
 def test_delete_items():
-
     db = ItemDB(":memory:")
     db.ensure_table("persons", "!name")
     with db:
@@ -426,7 +414,6 @@ def test_delete_items():
 
 
 def test_transactions1():
-
     filename = get_fresh_filename()
 
     db = ItemDB(filename)
@@ -456,7 +443,6 @@ def test_transactions1():
 
 
 def test_transactions2():
-
     filename = get_fresh_filename()
     with ItemDB(filename).ensure_table("items", "!id") as db:
         db.put_one("items", id=3, value=10)
@@ -522,7 +508,6 @@ def test_transactions3():
 
 
 def test_database_race_conditions():
-
     # This actually tests that a specific update scheme works with the
     # itemdb. It should. In a previous version, itemdb was specifically
     # designed for this syncing task. Now it's more general, but this
