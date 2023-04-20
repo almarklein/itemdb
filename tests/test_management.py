@@ -18,7 +18,6 @@ def get_fresh_filename():
 
 
 def test_create_tables():
-
     # Empty database, zero tables
 
     db = ItemDB(":memory:")
@@ -35,7 +34,6 @@ def test_create_tables():
 
 
 def test_table_fails():
-
     db = ItemDB(":memory:")
     for name in [(), 4, b"", [], {}]:
         with raises(TypeError):  # not a str
@@ -48,7 +46,6 @@ def test_table_fails():
 
 
 def test_delete_table():
-
     db = ItemDB(":memory:")
     db.ensure_table("persons", "!name")
     db.ensure_table("animals", "!name")
@@ -92,7 +89,6 @@ def test_delete_table():
 
 
 def test_rename_table():
-
     db = ItemDB(":memory:")
     db.ensure_table("persons", "!name")
     with db:
@@ -124,7 +120,6 @@ def test_rename_table():
 
 
 def test_change_unique_key():
-
     db = ItemDB(":memory:")
     db.ensure_table("persons", "!name")
     with db:

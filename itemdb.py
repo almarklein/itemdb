@@ -569,7 +569,6 @@ class Thread4AsyncItemDB(threading.Thread):
         self.db = None
 
     def run(self) -> None:
-
         while True:
             # Continues running until all queue items are processed,
             # even after closed (so we can finalize all futures)
