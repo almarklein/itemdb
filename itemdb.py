@@ -293,8 +293,9 @@ class ItemDB:
                 elif fieldname in {x.lstrip("!") for x in found_indices}:
                     raise IndexError(f"Given index {fieldname!r} should be unique.")
                 cur.execute(f"ALTER TABLE {table_name} ADD {index_key};")
+            cmd = "CREATE INDEX IF NOT EXISTS"
             cur.execute(
-                f"CREATE INDEX IF NOT EXISTS idx_{table_name}_{index_key} ON {table_name} ({index_key})"
+                f"{cmd} idx_{table_name}_{index_key} ON {table_name} ({index_key})"
             )
 
     def delete_table(self, table_name):
