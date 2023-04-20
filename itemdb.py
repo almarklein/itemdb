@@ -243,10 +243,11 @@ class ItemDB:
         text = f"CREATE TABLE IF NOT EXISTS {table_name} (_ob TEXT NOT NULL"
         unique_keys = sorted(x.lstrip("!") for x in indices if x.startswith("!"))
         if len(unique_keys) == 1:
-            text += f", {unique_keys[0]} NOT NULL PRIMARY KEY) WITHOUT ROWID;"
+            index_key = unique_keys[0]
+            text += f", {index_key} NOT NULL PRIMARY KEY) WITHOUT ROWID;"
         else:
-            for key in unique_keys:
-                text += f", {key} NOT NULL UNIQUE"
+            for index_key in unique_keys:
+                text += f", {index_key} NOT NULL UNIQUE"
             text += ");"
         cur.execute(text)
 
@@ -255,7 +256,7 @@ class ItemDB:
         found_indices = {(x[3] * "!" + x[1]) for x in cur}
 
         for fieldname in sorted(indices):
-            key = fieldname.lstrip("!")
+            index_key = fieldname.lstrip("!")
             if fieldname not in found_indices:
                 if fieldname.startswith("!"):
                     raise IndexError(
@@ -263,9 +264,9 @@ class ItemDB:
                     )
                 elif fieldname in {x.lstrip("!") for x in found_indices}:
                     raise IndexError(f"Given index {fieldname!r} should be unique.")
-                cur.execute(f"ALTER TABLE {table_name} ADD {key};")
+                cur.execute(f"ALTER TABLE {table_name} ADD {index_key};")
             cur.execute(
-                f"CREATE INDEX IF NOT EXISTS idx_{table_name}_{key} ON {table_name} ({key})"
+                f"CREATE INDEX IF NOT EXISTS idx_{table_name}_{index_key} ON {table_name} ({index_key})"
             )
 
     def delete_table(self, table_name):
@@ -309,7 +310,7 @@ class ItemDB:
         finally:
             cur.close()
 
-    def count(self, table_name, query, *args):
+    def count(self, table_name, query, *save_args):
         """Get the number of items in the given table that match the given query.
 
         Examples::
@@ -330,7 +331,7 @@ class ItemDB:
         self.get_indices(table_name)  # Fail with KeyError for invalid table name
         cur = self._conn.cursor()
         try:
-            cur.execute(f"SELECT COUNT(*) FROM {table_name} WHERE {query}", args)
+            cur.execute(f"SELECT COUNT(*) FROM {table_name} WHERE {query}", save_args)
             return cur.fetchone()[0]
         except sqlite3.OperationalError as err:
             if "no such column" in str(err).lower():
@@ -349,7 +350,7 @@ class ItemDB:
         finally:
             cur.close()
 
-    def select(self, table_name, query, *args):
+    def select(self, table_name, query, *save_args):
         """Get the items in the given table that match the given query.
 
         The query follows SQLite syntax and can only include indexed
@@ -382,7 +383,7 @@ class ItemDB:
         # and not run through the end.
         cur = self._conn.cursor()
         try:
-            cur.execute(f"SELECT _ob FROM {table_name} WHERE {query}", args)
+            cur.execute(f"SELECT _ob FROM {table_name} WHERE {query}", save_args)
             return [json_decode(x[0]) for x in cur]
         except sqlite3.OperationalError as err:
             if "no such column" in str(err).lower():
@@ -418,20 +419,20 @@ class ItemDB:
             if not isinstance(item, dict):
                 raise TypeError("Expecing each item to be a dict")
 
-            row_keys = "_ob"
+            index_keys = "_ob"
             row_plac = "?"
             row_vals = [json_encode(item)]  # Can raise TypeError
             for fieldname in indices:
-                key = fieldname.lstrip("!")
-                if key in item:
-                    row_keys += ", " + key
+                index_key = fieldname.lstrip("!")
+                if index_key in item:
+                    index_keys += ", " + index_key
                     row_plac += ", ?"
-                    row_vals.append(item[key])
+                    row_vals.append(item[index_key])
                 elif fieldname.startswith("!"):
-                    raise IndexError(f"Item does not have required field {key!r}")
+                    raise IndexError(f"Item does not have required field {index_key!r}")
 
             cur.execute(
-                f"INSERT OR REPLACE INTO {table_name} ({row_keys}) VALUES ({row_plac})",
+                f"INSERT OR REPLACE INTO {table_name} ({index_keys}) VALUES ({row_plac})",
                 row_vals,
             )
 
@@ -441,7 +442,7 @@ class ItemDB:
         """
         self.put(table_name, item)
 
-    def delete(self, table_name, query, *args):
+    def delete(self, table_name, query, *save_args):
         """Delete items from the given table.
         This method must be called within a transaction.
 
@@ -466,7 +467,7 @@ class ItemDB:
         if cur is None:
             raise IOError("Can only use delete() within a transaction.")
         try:
-            cur.execute(f"DELETE FROM {table_name} WHERE {query}", args)
+            cur.execute(f"DELETE FROM {table_name} WHERE {query}", save_args)
         except sqlite3.OperationalError as err:
             if "no such column" in str(err).lower():
                 raise IndexError(str(err))
