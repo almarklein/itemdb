@@ -134,6 +134,22 @@ Use e.g. ``count()``, ``select()`` to query the database:
     {'name': 'John', 'age': 19, 'fav_number': 8}
 
 
+Avoiding SQL injection
+----------------------
+
+`SQL injection <https://en.wikipedia.org/wiki/SQL_injection>`_ is a technique by which
+a potential hacker could access your database to get access or destroy data.
+The common path for SQL injection is to write SQL code in an end-user input field.
+
+For example, imagine a website that sells paintings, which may have a field for the minimum size. You'll want to use
+the given size in a query (e.g. a ``db.select()``) so you can show the user all paintings that
+qualify. Now imagine that an attacker `writes SQL code in that input field <https://xkcd.com/327/>`_.
+If the input is not *sanitized*, your db is compromised!
+
+This is the reason for the ``?`` notation used throughout these docs - the actual arguments
+are passed to SQLite in a safe way. It's a good habit to *always* provide query arguments this way.
+
+
 Transactions
 ------------
 
