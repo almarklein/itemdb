@@ -22,7 +22,7 @@ import itemdb  # noqa: E402
 # -- Project information -----------------------------------------------------
 
 project = "itemdb"
-copyright = "2018-2023, Almar Klein"
+copyright = "2018-2024, Almar Klein"
 author = "Almar Klein"
 release = itemdb.__version__
 
@@ -58,4 +58,4 @@ master_doc = "index"
 # Add any paths that contain custom static files (such as style sheets) here,
 # relative to this directory. They are copied after the builtin static files,
 # so a file named "default.css" will overwrite the builtin "default.css".
-html_static_path = ["_static"]
+html_static_path = []
