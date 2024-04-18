@@ -26,8 +26,6 @@ __all__ = ["ItemDB", "AsyncItemDB", "asyncify"]
 json_encode = json.JSONEncoder(ensure_ascii=True).encode
 json_decode = json.JSONDecoder().decode
 
-is_py36 = sys.version_info < (3, 7)
-
 
 # Notes:
 #
@@ -64,7 +62,7 @@ def asyncify(func):
             loop.call_soon_threadsafe(future.set_result, result)
 
     async def asyncified_func(*args, **kwargs):
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         future = loop.create_future()
         threading.Thread(
             name="asyncify " + func.__name__,
@@ -605,6 +603,7 @@ class AsyncItemDB:
 
     async def __new__(cls, filename):
         self = super().__new__(cls)
+        self._loop = asyncio.get_running_loop()
         self._queue = queue.Queue()
         self._thread = Thread4AsyncItemDB(self._queue)
         self._thread.start()
@@ -616,7 +615,7 @@ class AsyncItemDB:
         return self.db.mtime
 
     async def _handle(self, function, *args, **kwargs):
-        future = asyncio.get_event_loop().create_future()
+        future = self._loop.create_future()
         self._queue.put_nowait((future, function, args, kwargs))
         return await future
 
@@ -627,12 +626,12 @@ class AsyncItemDB:
         return await self._handle(self.db.__exit__, type, value, traceback)
 
     def __del__(self):
-        future = asyncio.get_event_loop().create_future()
+        future = self._loop.create_future()
         self._queue.put_nowait((future, self.db.close, (), {}))
         self._queue.put_nowait((None, None, None, None))
 
     async def close(self):
-        future = asyncio.get_event_loop().create_future()
+        future = self._loop.create_future()
         self._queue.put_nowait((future, self.db.close, (), {}))
         self._queue.put_nowait((None, None, None, None))
         return await future
@@ -704,7 +703,7 @@ class Thread4AsyncItemDB(threading.Thread):
                     if not fut.done():
                         fut.set_result(result)
 
-                loop = future._loop if is_py36 else future.get_loop()
+                loop = future.get_loop()
                 loop.call_soon_threadsafe(set_result, future, result)
 
             except BaseException as e:
@@ -713,5 +712,5 @@ class Thread4AsyncItemDB(threading.Thread):
                     if not fut.done():
                         fut.set_exception(e)
 
-                loop = future._loop if is_py36 else future.get_loop()
+                loop = future.get_loop()
                 loop.call_soon_threadsafe(set_exception, future, e)
