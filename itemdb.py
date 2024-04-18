@@ -10,7 +10,6 @@ with arbitrary fields, and add indices when needed.
 """
 
 import os
-import sys
 import json
 import queue
 import asyncio
