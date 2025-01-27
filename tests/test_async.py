@@ -1,4 +1,5 @@
 import gc
+import sys
 import time
 import asyncio
 import threading
@@ -139,7 +140,9 @@ async def _test_AsyncItemDB():
     with raises(IOError):  # Put needs to be used under a context
         await db.put("items", dict(id=1, mt=100))
 
-    with raises(TypeError):  # Normal with not allowed
+    # Normal with not allowed
+    Exc = AttributeError if sys.version_info < (3, 11) else TypeError
+    with raises(Exc):
         with db:
             pass
 
