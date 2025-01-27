@@ -13,8 +13,8 @@ explicit transactions using a ``with`` statement. It provides a simple
 object-based API, with the flexibility to store (JSON-compatible) items
 with arbitrary fields, and add indices when needed.
 
-This lib was originally part of the [TimeTurtle time tracker](https://timeturtle.app)
-and is also used in [MyPaaS](https://github.com/almarklein/mypaas).
+Originally developed as part of [TimaTagger](https://timetagger.app)
+and [MyPaaS](https://github.com/almarklein/mypaas).
 
 
 ## Installation
@@ -89,6 +89,6 @@ MIT
 
 ## Developers
 
-* Run `black .` to autoformat.
-* Run `flake8 . --max-line-length=99` to lint.
-* Run `pytest .` to run unit tests.
+* Run `ruff format` to autoformat.
+* Run `ruff check` to lint.
+* Run `pytest tests` to run unit tests.

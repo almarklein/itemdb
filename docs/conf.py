@@ -22,7 +22,7 @@ import itemdb  # noqa: E402
 # -- Project information -----------------------------------------------------
 
 project = "itemdb"
-copyright = "2018-2024, Almar Klein"
+copyright = "2018-2025, Almar Klein"
 author = "Almar Klein"
 release = itemdb.__version__
 
@@ -35,6 +35,7 @@ release = itemdb.__version__
 extensions = [
     "sphinx.ext.autodoc",
     "sphinx.ext.napoleon",
+    "sphinx_rtd_theme",
 ]
 
 # Add any paths that contain templates here, relative to this directory.
@@ -53,7 +54,7 @@ master_doc = "index"
 # The theme to use for HTML and HTML Help pages.  See the documentation for
 # a list of builtin themes.
 #
-# html_theme = "sphinx_rtd_theme"
+html_theme = "sphinx_rtd_theme"
 
 # Add any paths that contain custom static files (such as style sheets) here,
 # relative to this directory. They are copied after the builtin static files,

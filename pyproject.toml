@@ -1,0 +1,47 @@
+# Notes on how to do a release.
+#
+# * Bump `__version__` and commit.
+# * git tag vx.y
+# * git push origin main vx.y
+# * flit publish
+
+# ===== Project info
+
+[project]
+dynamic = ["version"]
+name = "itemdb"
+description = "Easy transactional database for Python dicts, backed by SQLite"
+readme = "README.md"
+license = { file = "LICENSE" }
+authors = [{ name = "Almar Klein" }]
+keywords = ["database", "sqlite", "no-sql"]
+requires-python = ">= 3.7"
+dependencies = []
+[project.optional-dependencies]
+lint = ["ruff"]
+tests = ["pytest"]
+docs = ["sphinx", "sphinx_rtd_theme"]
+dev = ["itemdb[lint,tests, docs]"]
+
+[project.urls]
+Homepage = "https://github.com/almarklein/itemdb"
+Documentation = "http://itemdb.readthedocs.io"
+Repository = "https://github.com/almarklein/itemdb"
+
+
+# ===== Building
+
+# Flit is great solution for simple pure-Python projects.
+[build-system]
+requires = ["flit_core >=3.2,<4"]
+build-backend = "flit_core.buildapi"
+
+
+# ===== Tooling
+
+[tool.ruff]
+line-length = 88
+
+[tool.ruff.lint]
+select = ["F", "E", "W", "B", "RUF"]
+ignore = []
