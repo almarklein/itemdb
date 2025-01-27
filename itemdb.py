@@ -20,7 +20,7 @@ import threading
 __version__ = "1.2.0"
 version_info = tuple(map(int, __version__.split(".")))
 
-__all__ = ["ItemDB", "AsyncItemDB", "asyncify"]
+__all__ = ["AsyncItemDB", "ItemDB", "asyncify"]
 
 json_encode = json.JSONEncoder(ensure_ascii=True).encode
 json_decode = json.JSONDecoder().decode
@@ -168,11 +168,11 @@ class ItemDB:
         except KeyError:
             pass
         except TypeError:
-            raise TypeError(f"Table name must be str, not {table_name}.")
+            raise TypeError(f"Table name must be str, not {table_name}.") from None
 
         # Check table name
         if not isinstance(table_name, str):
-            raise TypeError(f"Table name must be str, not {table_name}")
+            raise TypeError(f"Table name must be str, not {table_name}") from None
         elif not table_name.isidentifier():
             raise ValueError(f"Table name must be an identifier, not '{table_name}'")
 
@@ -284,9 +284,8 @@ class ItemDB:
             index_key = fieldname.lstrip("!")
             if fieldname not in found_indices:
                 if fieldname.startswith("!"):
-                    raise IndexError(
-                        f"Cannot add unique index {fieldname!r} after the table has been created."
-                    )
+                    when = "after the table has been created"
+                    raise IndexError(f"Cannot add unique index {fieldname!r} {when}.")
                 elif fieldname in {x.lstrip("!") for x in found_indices}:
                     raise IndexError(f"Given index {fieldname!r} should be unique.")
                 cur.execute(f"ALTER TABLE {table_name} ADD {index_key};")
@@ -338,7 +337,9 @@ class ItemDB:
         """
         self.get_indices(table_name)  # Fail with KeyError for invalid table name
         if not (isinstance(new_table_name, str) and new_table_name.isidentifier()):
-            raise TypeError(f"Table name must be a str identifier, not '{table_name}'")
+            raise TypeError(
+                f"Table name must be a str identifier, not '{table_name}'"
+            ) from None
         cur = self._cur
         if cur is None:
             raise IOError("Can only use rename_table() within a transaction.")
@@ -393,7 +394,7 @@ class ItemDB:
             return cur.fetchone()[0]
         except sqlite3.OperationalError as err:
             if "no such column" in str(err).lower():
-                raise IndexError(str(err))
+                raise IndexError(str(err)) from None
             raise err
         finally:
             cur.close()
@@ -458,7 +459,7 @@ class ItemDB:
             return [json_decode(x[0]) for x in cur]
         except sqlite3.OperationalError as err:
             if "no such column" in str(err).lower():
-                raise IndexError(str(err))
+                raise IndexError(str(err)) from None
             raise err
         finally:
             cur.close()
@@ -526,8 +527,9 @@ class ItemDB:
                 elif fieldname.startswith("!"):
                     raise IndexError(f"Item does not have required field {index_key!r}")
 
+            cmd = "INSERT OR REPLACE INTO"
             cur.execute(
-                f"INSERT OR REPLACE INTO {table_name} ({index_keys}) VALUES ({row_plac})",
+                f"{cmd} {table_name} ({index_keys}) VALUES ({row_plac})",
                 row_vals,
             )
 
@@ -588,7 +590,7 @@ class ItemDB:
             cur.execute(f"DELETE FROM {table_name} WHERE {query}", save_args)
         except sqlite3.OperationalError as err:
             if "no such column" in str(err).lower():
-                raise IndexError(str(err))
+                raise IndexError(str(err)) from None
             raise err
         finally:
             cur.close()

@@ -113,7 +113,7 @@ async def _check_speed_of_async_itemdb():
     time.sleep(0.1)
     t0 = time.perf_counter()
 
-    for i in range(n):
+    for _i in range(n):
         await do_work_using_asyncify()
 
     t1 = time.perf_counter()
@@ -122,7 +122,7 @@ async def _check_speed_of_async_itemdb():
     time.sleep(0.1)
     t0 = time.perf_counter()
 
-    for i in range(n):
+    for _i in range(n):
         await do_work_using_asyncitemdb()
 
     t1 = time.perf_counter()

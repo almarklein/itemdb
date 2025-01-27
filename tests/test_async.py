@@ -70,7 +70,7 @@ def test_asyncif2():
 
     # Run it multiple times
     t0 = time.perf_counter()
-    swait_multiple([func(3) for i in range(5)])
+    swait_multiple([func(3) for _ in range(5)])
     assert side_effect[0] == 50
     t1 = time.perf_counter()
     assert (t1 - t0) < 2
@@ -89,10 +89,10 @@ def test_AsyncItemDB_threads():
     time.sleep(0.1)
     assert threading.active_count() < 20
 
-    dbs1 = swait(_test_AsyncItemDB_threads())  # noqa
+    dbs1 = swait(_test_AsyncItemDB_threads())
     assert threading.active_count() > 100
 
-    dbs2 = swait(_test_AsyncItemDB_threads())  # noqa
+    dbs2 = swait(_test_AsyncItemDB_threads())
     time.sleep(0.1)
     assert threading.active_count() > 200
 
@@ -112,7 +112,7 @@ def test_AsyncItemDB_threads():
 
 async def _test_AsyncItemDB_threads():
     dbs = []
-    for i in range(100):
+    for _ in range(100):
         dbs.append(await AsyncItemDB(":memory:"))
     return dbs
 
@@ -137,7 +137,7 @@ async def _test_AsyncItemDB():
     with raises(IOError):  # Put needs to be used under a context
         await db.put("items", dict(id=1, mt=100))
 
-    with raises(Exception):  # Normal with not allowed
+    with raises(TypeError):  # Normal with not allowed
         with db:
             pass
 
