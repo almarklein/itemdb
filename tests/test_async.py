@@ -1,4 +1,5 @@
 import gc
+import sys
 import time
 import asyncio
 import threading
@@ -10,6 +11,9 @@ from itemdb import asyncify, ItemDB, AsyncItemDB
 
 
 side_effect = [0]
+
+root_loop = asyncio.new_event_loop()
+asyncio.set_event_loop(root_loop)
 
 
 def plain_func(x):
@@ -24,13 +28,12 @@ def plain_func_that_errors(x):
 
 def swait(co):
     """Sync-wait for the given coroutine, and return the result."""
-    return asyncio.get_event_loop().run_until_complete(co)
+    return root_loop.run_until_complete(co)
 
 
 def swait_multiple(cos):
     """Sync-wait for the given coroutines."""
-    # asyncio.get_event_loop().run_until_complete(asyncio.wait(cos))  # stopped working
-    asyncio.get_event_loop().run_until_complete(asyncio.gather(*cos))
+    root_loop.run_until_complete(asyncio.gather(*cos))
 
 
 def test_asyncify1():
@@ -70,7 +73,7 @@ def test_asyncif2():
 
     # Run it multiple times
     t0 = time.perf_counter()
-    swait_multiple([func(3) for i in range(5)])
+    swait_multiple([func(3) for _ in range(5)])
     assert side_effect[0] == 50
     t1 = time.perf_counter()
     assert (t1 - t0) < 2
@@ -89,10 +92,10 @@ def test_AsyncItemDB_threads():
     time.sleep(0.1)
     assert threading.active_count() < 20
 
-    dbs1 = swait(_test_AsyncItemDB_threads())  # noqa
+    dbs1 = swait(_test_AsyncItemDB_threads())
     assert threading.active_count() > 100
 
-    dbs2 = swait(_test_AsyncItemDB_threads())  # noqa
+    dbs2 = swait(_test_AsyncItemDB_threads())
     time.sleep(0.1)
     assert threading.active_count() > 200
 
@@ -112,7 +115,7 @@ def test_AsyncItemDB_threads():
 
 async def _test_AsyncItemDB_threads():
     dbs = []
-    for i in range(100):
+    for _ in range(100):
         dbs.append(await AsyncItemDB(":memory:"))
     return dbs
 
@@ -137,7 +140,9 @@ async def _test_AsyncItemDB():
     with raises(IOError):  # Put needs to be used under a context
         await db.put("items", dict(id=1, mt=100))
 
-    with raises(Exception):  # Normal with not allowed
+    # Normal with not allowed
+    Exc = AttributeError if sys.version_info < (3, 11) else TypeError
+    with raises(Exc):
         with db:
             pass
 

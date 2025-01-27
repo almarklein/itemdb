@@ -1,5 +1,4 @@
-""" The main usage tests.
-"""
+"""The main usage tests."""
 
 import os
 import time
@@ -362,7 +361,7 @@ def test_multiple_items():
         )
     assert set(x["id"] for x in db.select_all("items")) == {1, 2, 3, 4}
     for x in db.select_all("items"):
-        x["mt"] == 102
+        assert x["mt"] == 102
 
     # Lets take it further
     with db:
@@ -463,7 +462,7 @@ def test_transactions2():
 
     def run_read():
         db = ItemDB(filename)
-        for i in range(30):
+        for _i in range(30):
             time.sleep(0.05)
             item = db.select_one("items", "id == 3")
             read.append(item["value"])
@@ -495,7 +494,7 @@ def test_transactions3():
         with db:
             time.sleep(0.2)
 
-    threads = [threading.Thread(target=run_slow_transaction) for i in range(3)]
+    threads = [threading.Thread(target=run_slow_transaction) for _ in range(3)]
     t0 = time.perf_counter()
     for t in threads:
         t.start()
@@ -524,7 +523,7 @@ def test_database_race_conditions():
     ItemDB(filename).ensure_table("items", "!id")
 
     def push_a_bunch():
-        for i in range(n_writes):
+        for _ in range(n_writes):
             id = random.randint(1, 10)
             mt = random.randint(1000, 2000)
             tracking[id].append(mt)
@@ -535,7 +534,7 @@ def test_database_race_conditions():
 
     # Prepare, start, and join threads
     t0 = time.perf_counter()
-    threads = [threading.Thread(target=push_a_bunch) for i in range(n_threads)]
+    threads = [threading.Thread(target=push_a_bunch) for _ in range(n_threads)]
     for t in threads:
         t.start()
     for t in threads:
@@ -553,7 +552,7 @@ def test_database_race_conditions():
         id = item["id"]
         assert item["mt"] == max(tracking[id])
 
-    return items
+    # return items
 
 
 def test_threaded_access():

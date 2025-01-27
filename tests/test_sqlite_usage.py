@@ -23,6 +23,7 @@ import threading
 tempdir = tempfile.gettempdir()
 n_threads = 40
 n_writes = 10
+RETURN_ITEMS = False
 
 
 def create_db(dbname):
@@ -77,7 +78,7 @@ def xxtest_sqlite_nonlocking():
     t0 = time.perf_counter()
     threads = [
         threading.Thread(target=write_to_db, args=(filename, False))
-        for i in range(n_threads)
+        for _ in range(n_threads)
     ]
     for t in threads:
         t.start()
@@ -89,7 +90,7 @@ def xxtest_sqlite_nonlocking():
     con = sqlite3.connect(filename)
     items = [item for item in con.execute("SELECT id, mt FROM items")]
 
-    print(f"{t1-t0} s, for {n_threads*n_writes} writes, saving {len(items)} items")
+    print(f"{t1 - t0} s, for {n_threads * n_writes} writes, saving {len(items)} items")
 
     assert 10 <= len(items) <= 120
     fails = 0
@@ -99,7 +100,9 @@ def xxtest_sqlite_nonlocking():
             fails += 1
         mts[item[0]] = item[1]
     assert fails > 0
-    return items
+
+    if RETURN_ITEMS:
+        return items
 
 
 def test_sqlite_locking():
@@ -113,7 +116,7 @@ def test_sqlite_locking():
     # Prepare, start, and join threads
     t0 = time.perf_counter()
     threads = [
-        threading.Thread(target=write_to_db, args=(filename,)) for i in range(n_threads)
+        threading.Thread(target=write_to_db, args=(filename,)) for _ in range(n_threads)
     ]
     for t in threads:
         t.start()
@@ -125,7 +128,7 @@ def test_sqlite_locking():
     con = sqlite3.connect(filename)
     items = [item for item in con.execute("SELECT id, mt FROM items")]
 
-    print(f"{t1-t0} s, for {n_threads*n_writes} writes, saving {len(items)} items")
+    print(f"{t1 - t0} s, for {n_threads * n_writes} writes, saving {len(items)} items")
 
     assert 10 <= len(items) <= 100
     # assert len(items) == n_threads * n_writes
@@ -134,9 +137,11 @@ def test_sqlite_locking():
         assert item[1] >= mts.get(item[0], -9999)
         mts[item[0]] = item[1]
 
-    return items
+    if RETURN_ITEMS:
+        return items
 
 
 if __name__ == "__main__":
+    RETURN_ITEMS = True
     items = xxtest_sqlite_nonlocking()
     items = test_sqlite_locking()
