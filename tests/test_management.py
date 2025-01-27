@@ -1,5 +1,4 @@
-""" Tests related to db management and tables.
-"""
+"""Tests related to db management and tables."""
 
 import os
 import tempfile

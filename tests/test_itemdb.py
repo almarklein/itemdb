@@ -1,5 +1,4 @@
-""" The main usage tests.
-"""
+"""The main usage tests."""
 
 import os
 import time

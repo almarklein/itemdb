@@ -89,7 +89,7 @@ def xxtest_sqlite_nonlocking():
     con = sqlite3.connect(filename)
     items = [item for item in con.execute("SELECT id, mt FROM items")]
 
-    print(f"{t1-t0} s, for {n_threads*n_writes} writes, saving {len(items)} items")
+    print(f"{t1 - t0} s, for {n_threads * n_writes} writes, saving {len(items)} items")
 
     assert 10 <= len(items) <= 120
     fails = 0
@@ -125,7 +125,7 @@ def test_sqlite_locking():
     con = sqlite3.connect(filename)
     items = [item for item in con.execute("SELECT id, mt FROM items")]
 
-    print(f"{t1-t0} s, for {n_threads*n_writes} writes, saving {len(items)} items")
+    print(f"{t1 - t0} s, for {n_threads * n_writes} writes, saving {len(items)} items")
 
     assert 10 <= len(items) <= 100
     # assert len(items) == n_threads * n_writes

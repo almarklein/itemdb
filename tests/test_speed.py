@@ -117,7 +117,7 @@ async def _check_speed_of_async_itemdb():
         await do_work_using_asyncify()
 
     t1 = time.perf_counter()
-    print(f"with asyncify:    {(t1 - t0)/n:0.9f} s")
+    print(f"with asyncify:    {(t1 - t0) / n:0.9f} s")
 
     time.sleep(0.1)
     t0 = time.perf_counter()
@@ -126,7 +126,7 @@ async def _check_speed_of_async_itemdb():
         await do_work_using_asyncitemdb()
 
     t1 = time.perf_counter()
-    print(f"with AsyncItemDB: {(t1 - t0)/n:0.9f} s")
+    print(f"with AsyncItemDB: {(t1 - t0) / n:0.9f} s")
 
 
 if __name__ == "__main__":
