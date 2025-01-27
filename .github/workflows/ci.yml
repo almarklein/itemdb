@@ -12,55 +12,55 @@ jobs:
 
   lint:
     name: Test Linting
+    timeout-minutes: 5
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
     steps:
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@v4
     - name: Set up Python
-      uses: actions/setup-python@v4
+      uses: actions/setup-python@v5
       with:
-        python-version: 3.11
+        python-version: '3.12'
     - name: Install dependencies
       run: |
           python -m pip install --upgrade pip
-          pip install -U black flake8
-    - name: Black
+          pip install ruff
+    - name: Ruff lint
       run: |
-          black --check .
-    - name: Flake8
+          ruff check --output-format=github .
+    - name: Ruff format
       run: |
-          flake8 . --max-line-length=99
+          ruff format --check .
 
   docs:
-    name: Test docs
+    name: Test Docs
+    timeout-minutes: 5
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
     steps:
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@v4
     - name: Set up Python
-      uses: actions/setup-python@v4
+      uses: actions/setup-python@v5
       with:
-        python-version: 3.11
-    - name: Install dependencies
+        python-version: '3.12'
+    - name: Install dev dependencies
       run: |
           python -m pip install --upgrade pip
-          pip install -U sphinx
+          pip install -U -e .[docs]
     - name: Build docs
       run: |
           cd docs
-          make html
+          make html SPHINXOPTS="-W --keep-going"
 
   tests:
     name: ${{ matrix.name }}
     runs-on: ${{ matrix.os }}
     strategy:
+      fail-fast: false
       matrix:
         include:
-          - name: Linux py37
-            os: ubuntu-latest
-            pyversion: '3.7'
           - name: Linux py38
             os: ubuntu-latest
             pyversion: '3.8'
@@ -76,24 +76,30 @@ jobs:
           - name: Linux py312
             os: ubuntu-latest
             pyversion: '3.12'
-          - name: Windows py311
+          - name: Linux py313
+            os: ubuntu-latest
+            pyversion: '3.13'
+          #
+          - name: Windows py313
             os: windows-latest
-            pyversion: '3.11'
-          - name: MacOS py311
+            pyversion: '3.13'
+          - name: MacOS py313
             os: macos-latest
-            pyversion: '3.11'
+            pyversion: '3.13'
 
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - name: Set up Python ${{ matrix.pyversion }}
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.pyversion }}
       - name: Install dependencies
+        shell: bash
         run: |
             python -m pip install --upgrade pip
             pip install pytest pytest-cov
+            pip install .
+            rm -rf ./itemdb.py ./build ./egg-info
       - name: Test with pytest
         run: |
-            pip install .
             pytest -v --cov=itemdb .
