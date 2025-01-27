@@ -11,6 +11,9 @@ from itemdb import asyncify, ItemDB, AsyncItemDB
 
 side_effect = [0]
 
+root_loop = asyncio.new_event_loop()
+asyncio.set_event_loop(root_loop)
+
 
 def plain_func(x):
     time.sleep(1)  # emulate io
@@ -24,13 +27,12 @@ def plain_func_that_errors(x):
 
 def swait(co):
     """Sync-wait for the given coroutine, and return the result."""
-    return asyncio.get_event_loop().run_until_complete(co)
+    return root_loop.run_until_complete(co)
 
 
 def swait_multiple(cos):
     """Sync-wait for the given coroutines."""
-    # asyncio.get_event_loop().run_until_complete(asyncio.wait(cos))  # stopped working
-    asyncio.get_event_loop().run_until_complete(asyncio.gather(*cos))
+    root_loop.run_until_complete(asyncio.gather(*cos))
 
 
 def test_asyncify1():

@@ -14,7 +14,7 @@ executor = concurrent.futures.ThreadPoolExecutor(
 
 
 async def run_in_thread(func, *args, **kwargs):
-    loop = asyncio.get_event_loop()
+    loop = asyncio.get_running_loop()
     future = loop.create_future()
 
     def thread_func():
@@ -40,7 +40,7 @@ class FakeItemDB:
 
     async def work_async2(self):
         # Using a thread pool
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         return await loop.run_in_executor(executor, self.work)
 
 
@@ -65,7 +65,7 @@ def check_speed_of_async():
     # work_async1 0.0002502583791895948
     # work_async2 0.00015008997599039617
 
-    loop = asyncio.get_event_loop()
+    loop = asyncio.new_event_loop()
     for i in range(3):
         method_name = f"work_async{i}"
         t = loop.run_until_complete(do_some_work(method_name))
@@ -99,7 +99,8 @@ async def do_work_using_asyncitemdb():
 
 def check_speed_of_async_itemdb():
     co = _check_speed_of_async_itemdb()
-    asyncio.get_event_loop().run_until_complete(co)
+    loop = asyncio.new_event_loop()
+    loop.run_until_complete(co)
 
 
 async def _check_speed_of_async_itemdb():
