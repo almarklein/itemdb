@@ -1,4 +1,4 @@
-# Copyright (c) 2019-2021 Almar Klein - This code is subject to the MIT license
+# Copyright (c) 2019-2025 Almar Klein - This code is subject to the MIT license
 """
 The itemdb library allows you to store and retrieve Python dicts in a
 database on the local filesystem, in an easy, fast, and reliable way.
